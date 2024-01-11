@@ -9,8 +9,8 @@ TREW is tool that can identify Telomeric repeat motif (TRM) with any whole-genom
 
 You can download a binary from release or build from source.
 
-[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)  
-[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)  
+[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)
+[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)
 [MacOS (x86_64, arm64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-macos-universal.tar.gz)
 
 ### Install from source
@@ -63,7 +63,7 @@ Long-read sequencing
 trew long MIN_MER MAX_MER <long_read_data1.fastq.gz> <long_read_data2.fastq>... -t <number of threads> 
 ```
 
-MIN_MER : minimum length of sequence to find telomere [MIN_MER >= 3]  
+MIN_MER : minimum length of sequence to find telomere [MIN_MER >= 3]
 MAX_MER : maximum length of sequence to find telomere [MAX_MER <= 64]
 
 The following is a recommended command line to run TREW.
@@ -108,6 +108,6 @@ In long-read sequencing data, we count with repeat orientation to accurately rec
 
 Hyunwoo Ryu <wowo0118@korea.ac.kr>
 
-*Special thanks to*
-Jiho Choi <sdatoli@korea.ac.kr>
-Kyungmo Ku <kyungmoku7141@gmail.com>
+*Special thanks to*  
+Jiho Choi <sdatoli@korea.ac.kr>  
+Kyungmo Ku <kyungmoku7141@gmail.com>  
