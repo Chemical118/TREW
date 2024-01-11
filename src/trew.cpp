@@ -16,8 +16,8 @@ int main(int argc, char** argv) {
     argparse::ArgumentParser long_command("long");
     argparse::ArgumentParser short_command("short");
 
-    long_command.add_description("Estimation TRM from long-read sequencing data.");
-    short_command.add_description("Estimation TRM from short-read sequencing data.");
+    long_command.add_description("Estimate TRM from long-read sequencing data.");
+    short_command.add_description("Estimate TRM from short-read sequencing data.");
 
     long_command.add_argument("MIN_MER")
             .help("minimum length of sequence to find telomere [MIN_MER >= " + std::to_string(ABS_MIN_MER) + "]")

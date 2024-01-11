@@ -1,7 +1,7 @@
 TREW : Telomeric Repeat motif Estimation tool with Whole-genome sequencing
 ==========================================================================
 
-TREW is tool that can identify Telomeric repeat motif (TRM) with short-read sequencing data. This tool looks for repeated sequences in a single read to find candidates for TRMs, iterating through them to finally find a TRM.
+TREW is tool that can identify Telomeric repeat motif (TRM) with any whole-genome sequencing data. This tool looks for repeated sequences in a single read to find candidates for TRMs, iterating through them to finally find a TRM.
 
 [![Build](https://github.com/Chemical118/TREW/actions/workflows/build.yaml/badge.svg)](https://github.com/Chemical118/TREW/actions/workflows/build.yaml)[![CI](https://github.com/Chemical118/TREW/actions/workflows/ci.yaml/badge.svg)](https://github.com/Chemical118/TREW/actions/workflows/ci.yaml)[![codecov](https://codecov.io/gh/Chemical118/TREW/graph/badge.svg?token=WRDCVZUAWH)](https://codecov.io/gh/Chemical118/TREW)
 
@@ -9,8 +9,8 @@ TREW is tool that can identify Telomeric repeat motif (TRM) with short-read sequ
 
 You can download a binary from release or build from source.
 
-[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)
-[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)
+[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)  
+[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)  
 [MacOS (x86_64, arm64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-macos-universal.tar.gz)
 
 ### Install from source
