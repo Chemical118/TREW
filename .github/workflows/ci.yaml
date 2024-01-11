@@ -1,0 +1,46 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install dependency
+        run: |
+          pip3 install gcovr
+
+      - name: Cache C++ dependency
+        id: vcpkg-cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./vcpkg
+            ./vcpkg_installed
+          key: ubuntu-latest-vcpkg-cache-${{ hashFiles('vcpkg.json') }}
+
+      - name: Install C++ dependency
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/Microsoft/vcpkg.git
+          ./vcpkg/bootstrap-vcpkg.sh
+          ./vcpkg/vcpkg install
+
+      - name: Build TREW
+        run: |
+          mkdir build
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_CXX_FLAGS="-fprofile-arcs -ftest-coverage"
+          cmake --build build
+
+      - name: Test TREW
+        working-directory: ./build
+        run: ./trew_test
+
+      - name: Get Coverage
+        run: gcovr --cobertura-pretty -o ./ -f src
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
