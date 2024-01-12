@@ -11,7 +11,7 @@ int QUEUE_SIZE;
 double BASELINE;
 
 int main(int argc, char** argv) {
-    argparse::ArgumentParser program("trew", "0.1.0");
+    argparse::ArgumentParser program("trew", "0.1.1");
 
     argparse::ArgumentParser long_command("long");
     argparse::ArgumentParser short_command("short");

@@ -1358,10 +1358,10 @@ void process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint
     for (auto& [k, v] : final_result_vector) {
         int_to_four(buffer, k.second, k.first);
         if (v.backward == -1) {
-            fprintf(stdout, "%d,%s,%" PRId64"-%" PRId64"\n", k.first, buffer, v.forward, v.both);
+            fprintf(stdout, "%d,%s,%" PRId64",_,%" PRId64"\n", k.first, buffer, v.forward, v.both);
         }
         else {
-            fprintf(stdout, "%d,%s,%" PRId64":%" PRId64"-%" PRId64"\n", k.first, buffer, MAX(v.forward, v.backward), MIN(v.forward, v.backward), v.both);
+            fprintf(stdout, "%d,%s,%" PRId64",%" PRId64",%" PRId64"\n", k.first, buffer, MAX(v.forward, v.backward), MIN(v.forward, v.backward), v.both);
         }
     }
 }
