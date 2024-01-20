@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(k_mer_total_cnt_test) {
     }
 
     int st = 0;
-    int nd = (int)buffer_s.length() - 1;
+    int nd = (int) buffer_s.length() - 1;
     int len;
     int chr_code;
     int err_loc;
@@ -186,12 +186,12 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
 
     std::vector<std::string> repeat_list = {"TTGCATCACACCCTCGCCG", "TTAGGG", "TTAGAGCCCACA", "TTTTGCCCTCATCACACCCTCGCCTCCTTCGC"};
     for(auto& repeat : repeat_list) {
-        int repeat_len = (int)repeat.length();
+        int repeat_len = (int) repeat.length();
         std::string buffer = repeat * 20;
         uint64_t min_repeat_seq = four_to_int(repeat);
         min_repeat_seq = MIN(min_repeat_seq, get_rot_seq(reverse_complement_64(min_repeat_seq >> (2 * (32 - repeat_len))), repeat_len));
 
-        k_mer(buffer.c_str(), 0, (int)buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+        k_mer(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
               k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt);
 
         BOOST_CHECK_EQUAL(result -> size(), 1);
@@ -224,12 +224,12 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
 
     std::vector<std::string> repeat_list = {"TGCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "TTAGGG", "TTAGAGCCCACA", "TTTTGCCCTCATCACACCCTCGCCTCCTTCGC", "TTTTGCCCTCATCACACCCTCGCCTCCTTCGTGCTTGCCCCCACACTGACTGACGTGCAGTCTG"};
     for(auto& repeat : repeat_list) {
-        int repeat_len = (int)repeat.length();
+        int repeat_len = (int) repeat.length();
         std::string buffer = repeat * 10;
         uint128_t min_repeat_seq = four_to_int_128(repeat);
         min_repeat_seq = MIN(min_repeat_seq, get_rot_seq_128(reverse_complement_128(min_repeat_seq) >> (2 * (64 - repeat_len)), repeat_len));
 
-        k_mer_128(buffer.c_str(), 0, (int)buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+        k_mer_128(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                   k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt);
 
         BOOST_CHECK_EQUAL(result -> size(), 1);

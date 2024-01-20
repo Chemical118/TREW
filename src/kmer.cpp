@@ -1668,13 +1668,25 @@ void k_mer(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t
         }
     }
 
+    bool repeat_k;
+    std::vector<int> target_k_vector;
 
     for (int k = MIN_MER; k <= MAX_MER; k++) {
+        repeat_k = false;
         frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
-            target_frequency = frequency;
-            target_k = k;
-            break;
+        if (frequency >= MAX(BASELINE, target_frequency) && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
+            for (auto& tk : target_k_vector) {
+                if (k % tk == 0) {
+                    repeat_k = true;
+                    break;
+                }
+            }
+
+            if (!repeat_k) {
+                target_k = k;
+                target_frequency = frequency;
+                target_k_vector.push_back(target_k);
+            }
         }
     }
 
@@ -1803,12 +1815,25 @@ void k_mer_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint
         }
     }
 
+    bool repeat_k;
+    std::vector<int> target_k_vector;
+
     for (int k = MIN_MER; k <= MAX_MER; k++) {
+        repeat_k = false;
         frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
-            target_frequency = frequency;
-            target_k = k;
-            break;
+        if (frequency >= MAX(BASELINE, target_frequency) && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
+            for (auto& tk : target_k_vector) {
+                if (k % tk == 0) {
+                    repeat_k = true;
+                    break;
+                }
+            }
+
+            if (!repeat_k) {
+                target_k = k;
+                target_frequency = frequency;
+                target_k_vector.push_back(target_k);
+            }
         }
     }
 
@@ -1935,13 +1960,25 @@ int k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uin
         }
     }
 
+    bool repeat_k;
+    std::vector<int> target_k_vector;
 
     for (int k = MIN_MER; k <= MAX_MER; k++) {
+        repeat_k = false;
         frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
-            target_frequency = frequency;
-            target_k = k;
-            break;
+        if (frequency >= MAX(BASELINE, target_frequency) && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
+            for (auto& tk : target_k_vector) {
+                if (k % tk == 0) {
+                    repeat_k = true;
+                    break;
+                }
+            }
+
+            if (!repeat_k) {
+                target_k = k;
+                target_frequency = frequency;
+                target_k_vector.push_back(target_k);
+            }
         }
     }
 
@@ -2066,12 +2103,25 @@ int k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const
         }
     }
 
+    bool repeat_k;
+    std::vector<int> target_k_vector;
+
     for (int k = MIN_MER; k <= MAX_MER; k++) {
+        repeat_k = false;
         frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
-            target_frequency = frequency;
-            target_k = k;
-            break;
+        if (frequency >= MAX(BASELINE, target_frequency) && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
+            for (auto& tk : target_k_vector) {
+                if (k % tk == 0) {
+                    repeat_k = true;
+                    break;
+                }
+            }
+
+            if (!repeat_k) {
+                target_k = k;
+                target_frequency = frequency;
+                target_k_vector.push_back(target_k);
+            }
         }
     }
 
