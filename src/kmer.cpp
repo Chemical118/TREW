@@ -355,7 +355,7 @@ ResultMap* read_fastq(FILE* fp, ThreadData* thread_data, uint32_t** rot_table, u
         CounterMap_128* k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
 
         while (1) {
-            bytes_read = (int)fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
+            bytes_read = (int) fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
             buffer[bytes_read + shift] = '\0';
 
             for (int i = 0; i < bytes_read + shift; i++) {
@@ -411,13 +411,13 @@ void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue) {
     while (1) {
         LocationVector* loc_vector = new LocationVector{};
 
-        bytes_read = (int)fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
+        bytes_read = (int) fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
         buffer[bytes_read + shift] = '\0';
 
         for (int i = 0; i < bytes_read + shift; i++) {
-            if(buffer[i] == '\n') {
+            if (buffer[i] == '\n') {
                 num += 1;
-                if((num & 3) == 2){
+                if ((num & 3) == 2) {
                     if ((i - 1) - (idx + 1) + 1 > MAX_SEQ) {
                         fprintf(stderr, "This program is designed for short-read sequencing\n");
                         exit (EXIT_FAILURE);
@@ -431,7 +431,7 @@ void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue) {
 
         if (bytes_read <= 0) {
             buffer_task_queue -> push(QueueData{buffer, loc_vector});
-            if (feof (fp)){
+            if (feof (fp)) {
                 break;
             }
             else {
@@ -492,7 +492,7 @@ ResultMapData read_fastq_long(FILE* fp, ThreadData* thread_data, uint32_t** rot_
         }
 
         while (1) {
-            bytes_read = (int)fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
+            bytes_read = (int) fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
             buffer[bytes_read + shift] = '\0';
 
             for (int i = 0; i < bytes_read + shift; i++) {
@@ -573,7 +573,7 @@ ResultMapData read_fastq_long(FILE* fp, ThreadData* thread_data, uint32_t** rot_
         CounterMap_128* k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
 
         while (1) {
-            bytes_read = (int)fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
+            bytes_read = (int) fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
             buffer[bytes_read + shift] = '\0';
 
             for (int i = 0; i < bytes_read + shift; i++) {
@@ -670,7 +670,7 @@ void read_fastq_thread_long(FILE* fp, TBBQueue* buffer_task_queue) {
     while (1) {
         LocationVector* loc_vector = new LocationVector{};
 
-        bytes_read = (int)fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
+        bytes_read = (int) fread(buffer + shift, 1, LENGTH - 1 - shift, fp);
         buffer[bytes_read + shift] = '\0';
         for (int i = 0; i < bytes_read + shift; i++) {
             if (buffer[i] == '\n') {
@@ -684,7 +684,7 @@ void read_fastq_thread_long(FILE* fp, TBBQueue* buffer_task_queue) {
 
         if (bytes_read <= 0) {
             buffer_task_queue -> push(QueueData{buffer, loc_vector});
-            if (feof (fp)){
+            if (feof (fp)) {
                 break;
             }
             else {
@@ -737,9 +737,9 @@ ResultMap* read_fastq_gz(gzFile fp, ThreadData* thread_data, uint32_t** rot_tabl
             buffer[bytes_read + shift] = '\0';
 
             for (int i = 0; i < bytes_read + shift; i++) {
-                if(buffer[i] == '\n') {
+                if (buffer[i] == '\n') {
                     num += 1;
-                    if((num & 3) == 2){
+                    if ((num & 3) == 2) {
                         if ((i - 1) - (idx + 1) + 1 > MAX_SEQ) {
                             fprintf(stderr, "This program is designed for short-read sequencing\n");
                             exit (EXIT_FAILURE);
@@ -753,7 +753,7 @@ ResultMap* read_fastq_gz(gzFile fp, ThreadData* thread_data, uint32_t** rot_tabl
             }
 
             if (bytes_read < LENGTH - 1 - shift) {
-                if (gzeof(fp)){
+                if (gzeof(fp)) {
                     break;
                 }
                 else {
@@ -839,9 +839,9 @@ void read_fastq_gz_thread(gzFile fp, TBBQueue* buffer_task_queue) {
         buffer[bytes_read + shift] = '\0';
 
         for (int i = 0; i < bytes_read + shift; i++) {
-            if(buffer[i] == '\n') {
+            if (buffer[i] == '\n') {
                 num += 1;
-                if((num & 3) == 2){
+                if ((num & 3) == 2) {
                     if ((i - 1) - (idx + 1) + 1 > MAX_SEQ) {
                         fprintf(stderr, "This program is designed for short-read sequencing\n");
                         exit (EXIT_FAILURE);
@@ -855,7 +855,7 @@ void read_fastq_gz_thread(gzFile fp, TBBQueue* buffer_task_queue) {
 
         if (bytes_read < LENGTH - 1 - shift) {
             buffer_task_queue -> push(QueueData{buffer, loc_vector});
-            if (gzeof(fp)){
+            if (gzeof(fp)) {
                 break;
             }
             else {
@@ -975,7 +975,7 @@ ResultMapData read_fastq_gz_long(gzFile fp, ThreadData* thread_data, uint32_t** 
             }
 
             if (bytes_read < LENGTH - 1 - shift) {
-                if (gzeof(fp)){
+                if (gzeof(fp)) {
                     break;
                 }
                 else {
@@ -1112,7 +1112,7 @@ void read_fastq_gz_thread_long(gzFile fp, TBBQueue* buffer_task_queue) {
 
         if (bytes_read < LENGTH - 1 - shift) {
             buffer_task_queue -> push(QueueData{buffer, loc_vector});
-            if (gzeof(fp)){
+            if (gzeof(fp)) {
                 break;
             }
             else {
@@ -1378,7 +1378,7 @@ uint8_t** set_repeat_check_table() {
         max_ind = 1 << (2 * (i + MIN_MER));
 
         repeat_check_table[i] = (uint8_t*) calloc(max_ind, sizeof(uint16_t));
-        if (repeat_check_table[i] == nullptr){
+        if (repeat_check_table[i] == nullptr) {
             fprintf(stderr, "memory allocation failure\n");
             exit(EXIT_FAILURE);
         }
@@ -1620,7 +1620,7 @@ void k_mer(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t
         chr_code = codes[seq[i]];
         if (chr_code >= 0) {
             len = MIN(i - err_loc, MAX_MER);
-            if(len >= MIN_MER){
+            if (len >= MIN_MER) {
                 k_mer_total_cnt[0]++;
                 k_mer_total_cnt[len - MIN_MER + 1]--;
             }
@@ -1640,7 +1640,7 @@ void k_mer(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t
             chr_code = codes[seq[i]];
             if (chr_code >= 0) {
                 tmp += chr_code;
-                if(i - err_loc >= k) {
+                if (i - err_loc >= k) {
                     if (k <= TABLE_MAX_MER) {
                         val = rot_table[k - MIN_MER][tmp & extract_k_mer[k - MIN_MER]];
                         cur_cnt = ++k_mer_counter[k - MIN_MER][val];
@@ -1658,7 +1658,7 @@ void k_mer(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t
                     }
 
                     estimated_count = k_mer_data[k - MIN_MER][K_MER_DATA_MAX] + k_mer_total_cnt[k - MIN_MER] - k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-                    if(estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE){
+                    if (estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE) {
                         break;
                     }
                 }
@@ -1670,10 +1670,11 @@ void k_mer(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t
 
 
     for (int k = MIN_MER; k <= MAX_MER; k++) {
-        frequency = (double)k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double)k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency > target_frequency && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
+        frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
+        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
             target_frequency = frequency;
             target_k = k;
+            break;
         }
     }
 
@@ -1692,7 +1693,7 @@ void k_mer(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t
                     }
                 } else {
                     for (auto& [key, value] : k_mer_counter_map[k - TABLE_MAX_MER - 1]) {
-                        _c = get_rot_seq(reverse_complement_64(key >> (2 * (32 - k))), k);
+                        _c = get_rot_seq(reverse_complement_64(key) >> (2 * (32 - k)), k);
                         (*result)[KmerSeq {k, MIN(key, _c)}] += value;
                     }
                     k_mer_counter_map[k - TABLE_MAX_MER - 1].clear();
@@ -1754,7 +1755,7 @@ void k_mer_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint
         chr_code = codes[seq[i]];
         if (chr_code >= 0) {
             len = MIN(i - err_loc, MAX_MER);
-            if(len >= MIN_MER){
+            if (len >= MIN_MER) {
                 k_mer_total_cnt[0]++;
                 k_mer_total_cnt[len - MIN_MER + 1]--;
             }
@@ -1774,7 +1775,7 @@ void k_mer_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint
             chr_code = codes[seq[i]];
             if (chr_code >= 0) {
                 tmp += chr_code;
-                if(i - err_loc >= k) {
+                if (i - err_loc >= k) {
                     if (k <= TABLE_MAX_MER) {
                         val = (uint64_t) rot_table[k - MIN_MER][(uint32_t) (tmp & extract_k_mer[k - MIN_MER])];
                         cur_cnt = ++k_mer_counter[k - MIN_MER][(uint32_t) val];
@@ -1792,7 +1793,7 @@ void k_mer_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint
                     }
 
                     estimated_count = (uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] + k_mer_total_cnt[k - MIN_MER] - (uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-                    if(estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE){
+                    if (estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE) {
                         break;
                     }
                 }
@@ -1804,13 +1805,14 @@ void k_mer_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint
 
     for (int k = MIN_MER; k <= MAX_MER; k++) {
         frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency > target_frequency && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))){
+        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
             target_frequency = frequency;
             target_k = k;
+            break;
         }
     }
 
-    if(target_frequency >= BASELINE){
+    if (target_frequency >= BASELINE) {
         for (int k = MIN_MER; k <= MAX_MER; k++) {
             if (target_k == k) {
                 if (k <= TABLE_MAX_MER) {
@@ -1885,7 +1887,7 @@ int k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uin
         chr_code = codes[seq[i]];
         if (chr_code >= 0) {
             len = MIN(i - err_loc, MAX_MER);
-            if (len >= MIN_MER){
+            if (len >= MIN_MER) {
                 k_mer_total_cnt[0]++;
                 k_mer_total_cnt[len - MIN_MER + 1]--;
             }
@@ -1923,7 +1925,7 @@ int k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uin
                     }
 
                     estimated_count = k_mer_data[k - MIN_MER][K_MER_DATA_MAX] + k_mer_total_cnt[k - MIN_MER] - k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-                    if (estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE){
+                    if (estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE) {
                         break;
                     }
                 }
@@ -1935,10 +1937,11 @@ int k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uin
 
 
     for (int k = MIN_MER; k <= MAX_MER; k++) {
-        frequency = (double)k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double)k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency > target_frequency && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
+        frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
+        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
             target_frequency = frequency;
             target_k = k;
+            break;
         }
     }
 
@@ -2015,7 +2018,7 @@ int k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const
         chr_code = codes[seq[i]];
         if (chr_code >= 0) {
             len = MIN(i - err_loc, MAX_MER);
-            if (len >= MIN_MER){
+            if (len >= MIN_MER) {
                 k_mer_total_cnt[0]++;
                 k_mer_total_cnt[len - MIN_MER + 1]--;
             }
@@ -2053,7 +2056,7 @@ int k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const
                     }
 
                     estimated_count = (uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] + k_mer_total_cnt[k - MIN_MER] - (uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-                    if (estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE){
+                    if (estimated_count < k_mer_total_cnt[k - MIN_MER] * BASELINE) {
                         break;
                     }
                 }
@@ -2065,13 +2068,14 @@ int k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const
 
     for (int k = MIN_MER; k <= MAX_MER; k++) {
         frequency = (double) k_mer_data[k - MIN_MER][K_MER_DATA_MAX] / (double) k_mer_data[k - MIN_MER][K_MER_DATA_COUNT];
-        if (frequency > target_frequency && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))){
+        if (frequency >= BASELINE && !(k <= TABLE_MAX_MER ? repeat_check_table[k - MIN_MER][(uint32_t) k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ]] : get_repeat_check(k_mer_data[k - MIN_MER][K_MER_DATA_MAX_SEQ], k))) {
             target_frequency = frequency;
             target_k = k;
+            break;
         }
     }
 
-    if (target_frequency >= BASELINE){
+    if (target_frequency >= BASELINE) {
         for (int k = MIN_MER; k <= MAX_MER; k++) {
             if (target_k == k) {
                 if (k <= TABLE_MAX_MER) {
