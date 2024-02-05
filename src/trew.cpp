@@ -249,17 +249,16 @@ int main(int argc, char** argv) {
             
         }
 
-        int64_t tmp_tot_cnt;
-        int64_t max_tot_cnt = -1;
+        bool max_cnt_check = false;
         for (auto& [k, v] : *total_result) {
-            tmp_tot_cnt = v.forward + v.backward + v.both;
-            if (tmp_tot_cnt > max_tot_cnt) {
-                max_tot_cnt = tmp_tot_cnt;
+            if (v.forward + v.backward + v.both >= ANS_COUNT) {
+                max_cnt_check = true;
+                break;
             }
         }
 
         fprintf(stdout, ">Putative_TRM\n");
-        if (max_tot_cnt >= ANS_COUNT) {
+        if (max_cnt_check) {
             int64_t _tcnt;
             FinalFastqVector total_result_vector {};
             for (auto& [k, v] : *total_result) {
@@ -273,6 +272,7 @@ int main(int argc, char** argv) {
                     total_result_vector.emplace_back(k ,v);
                 }
             }
+
             FinalFastqData ratio_result {};
             ResultMap score_result_map {};
 
@@ -329,6 +329,7 @@ int main(int argc, char** argv) {
         }
 
         delete total_result;
+        delete[] thread_data_list;
     }
     else if (program.is_subcommand_used("short")) {
         try {
@@ -448,28 +449,31 @@ int main(int argc, char** argv) {
             }
             delete temp_fastq_vector;
         }
-        
-        int64_t tmp_tot_cnt;
-        int64_t max_tot_cnt = -1;
+
+        bool max_cnt_check = false;
         for (auto& [k, v] : *total_result) {
-            tmp_tot_cnt = v.forward + v.backward + v.both;
-            if (tmp_tot_cnt > max_tot_cnt) {
-                max_tot_cnt = tmp_tot_cnt;
+            if (v.forward + v.backward + v.both >= ANS_COUNT) {
+                max_cnt_check = true;
+                break;
             }
         }
 
         fprintf(stdout, ">Putative_TRM\n");
-        if (max_tot_cnt >= ANS_COUNT) {
+        if (max_cnt_check) {
             int64_t _tcnt;
-            for (auto& [_, v] : *total_result) {
-                if (v.backward > v.forward) {
-                    _tcnt = v.forward;
-                    v.forward = v.backward;
-                    v.backward = _tcnt;
+            FinalFastqVector total_result_vector {};
+            for (auto& [k, v] : *total_result) {
+                if (v.forward + v.backward + v.both > PRINT_COUNT) {
+                    if (v.backward > v.forward) {
+                        _tcnt = v.forward;
+                        v.forward = v.backward;
+                        v.backward = _tcnt;
+                    }
+
+                    total_result_vector.emplace_back(k ,v);
                 }
             }
 
-            FinalFastqVector total_result_vector(total_result -> begin(), total_result -> end());
             FinalFastqData ratio_result {};
             ResultMap score_result_map {};
 
