@@ -173,6 +173,7 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
     BASELINE = 0.8;
     NUM_THREAD = 1;
 
+    uint128_t seq_rev;
     uint8_t **repeat_check_table = set_repeat_check_table();
     uint32_t **rot_table = set_rotation_table(repeat_check_table);
     uint64_t *extract_k_mer = set_extract_k_mer();
@@ -191,13 +192,15 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
         uint64_t min_repeat_seq = four_to_int(repeat);
         min_repeat_seq = MIN(min_repeat_seq, get_rot_seq(reverse_complement_64(min_repeat_seq >> (2 * (32 - repeat_len))), repeat_len));
 
-        k_mer(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-              k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt);
+        k_mer_check(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                    k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt, MIN_MER, MAX_MER);
 
         BOOST_CHECK_EQUAL(result -> size(), 1);
         for(auto& [k, v] : (*result)) {
+            seq_rev = get_rot_seq_128(reverse_complement_128(k.second) >> (2 * (64 - k.first)), k.first);
+
             BOOST_CHECK_EQUAL(repeat_len, k.first);
-            BOOST_CHECK_EQUAL(min_repeat_seq, k.second);
+            BOOST_CHECK_EQUAL(min_repeat_seq, MIN(k.second, seq_rev));
             BOOST_CHECK_EQUAL(repeat_len * (20 - 1) + 1, v);
         }
         result -> clear();
@@ -211,6 +214,7 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
     BASELINE = 0.8;
     NUM_THREAD = 1;
 
+    uint128_t seq_rev;
     uint8_t **repeat_check_table = set_repeat_check_table();
     uint32_t **rot_table = set_rotation_table(repeat_check_table);
     uint128_t *extract_k_mer = set_extract_k_mer_128();
@@ -229,13 +233,15 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
         uint128_t min_repeat_seq = four_to_int_128(repeat);
         min_repeat_seq = MIN(min_repeat_seq, get_rot_seq_128(reverse_complement_128(min_repeat_seq) >> (2 * (64 - repeat_len)), repeat_len));
 
-        k_mer_128(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                  k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt);
+        k_mer_check_128(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                        k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt, MIN_MER, MAX_MER);
 
         BOOST_CHECK_EQUAL(result -> size(), 1);
         for(auto& [k, v] : (*result)) {
+            seq_rev = get_rot_seq_128(reverse_complement_128(k.second) >> (2 * (64 - k.first)), k.first);
+
             BOOST_CHECK_EQUAL(repeat_len, k.first);
-            BOOST_CHECK_EQUAL(min_repeat_seq, k.second);
+            BOOST_CHECK_EQUAL(min_repeat_seq, MIN(k.second, seq_rev));
             BOOST_CHECK_EQUAL(repeat_len * (10 - 1) + 1, v);
         }
         result -> clear();
@@ -260,6 +266,11 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
         extract_k_mer_128 = set_extract_k_mer_128();
     }
 
+    uint128_t *extract_k_mer_ans = nullptr;
+    if (MIN_MER > ABS_MIN_MER) {
+        extract_k_mer_ans = set_extract_k_mer_ans();
+    }
+
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
     if (boost::unit_test::framework::master_test_suite().argc == 3) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[1]), true},
@@ -277,7 +288,7 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
             BOOST_CHECK_NO_THROW(process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
-                                 extract_k_mer, extract_k_mer_128,
+                                 extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
                                  thread_data_list, is_gz));
         }
     }
@@ -302,6 +313,11 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
         extract_k_mer_128 = set_extract_k_mer_128();
     }
 
+    uint128_t *extract_k_mer_ans = nullptr;
+    if (MIN_MER > ABS_MIN_MER) {
+        extract_k_mer_ans = set_extract_k_mer_ans();
+    }
+
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
     if (boost::unit_test::framework::master_test_suite().argc == 3) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[1]), true},
@@ -319,7 +335,7 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
             BOOST_CHECK_NO_THROW(process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
-                                              extract_k_mer, extract_k_mer_128,
+                                              extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
                                               thread_data_list, is_gz));
         }
     }
@@ -345,6 +361,11 @@ BOOST_AUTO_TEST_CASE(main_test_long_32) {
         extract_k_mer_128 = set_extract_k_mer_128();
     }
 
+    uint128_t *extract_k_mer_ans = nullptr;
+    if (MIN_MER > ABS_MIN_MER) {
+        extract_k_mer_ans = set_extract_k_mer_ans();
+    }
+
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
     if (boost::unit_test::framework::master_test_suite().argc == 3) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[3]), true},
@@ -356,13 +377,12 @@ BOOST_AUTO_TEST_CASE(main_test_long_32) {
     }
 
     std::vector<int> NUM_THREAD_VECTOR = {1, 2};
-
     ThreadData* thread_data_list = new ThreadData[*std::max_element(NUM_THREAD_VECTOR.begin(), NUM_THREAD_VECTOR.end())];
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
             BOOST_CHECK_NO_THROW(process_kmer_long(fastq_path.string().c_str(), repeat_check_table, rot_table,
-                                                   extract_k_mer, extract_k_mer_128,
+                                                   extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
                                                    thread_data_list, is_gz));
         }
     }
@@ -388,6 +408,11 @@ BOOST_AUTO_TEST_CASE(main_test_long_64) {
         extract_k_mer_128 = set_extract_k_mer_128();
     }
 
+    uint128_t *extract_k_mer_ans = nullptr;
+    if (MIN_MER > ABS_MIN_MER) {
+        extract_k_mer_ans = set_extract_k_mer_ans();
+    }
+
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
     if (boost::unit_test::framework::master_test_suite().argc == 5) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[3]), true},
@@ -405,7 +430,7 @@ BOOST_AUTO_TEST_CASE(main_test_long_64) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
             BOOST_CHECK_NO_THROW(process_kmer_long(fastq_path.string().c_str(), repeat_check_table, rot_table,
-                                                   extract_k_mer, extract_k_mer_128,
+                                                   extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
                                                    thread_data_list, is_gz));
         }
     }

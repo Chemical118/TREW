@@ -1,5 +1,5 @@
-TREW : Telomeric Repeat motif Estimation tool with Whole-genome sequencing
-==========================================================================
+TREW : Telomeric Repeat motif Estimation tool with Whole-genome sequencing data
+===============================================================================
 
 TREW is tool that can identify Telomeric repeat motif (TRM) with any whole-genome sequencing data. This tool looks for repeated sequences in a single read to find candidates for TRMs, iterating through them to finally find a TRM.
 
@@ -7,10 +7,10 @@ TREW is tool that can identify Telomeric repeat motif (TRM) with any whole-genom
 
 ### Install
 
-You can download a binary from release or build from source.
+You can install `TREW` by downloading a binary from the release or building from the source.
 
-[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)  
-[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)  
+[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)
+[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)
 [MacOS (x86_64, arm64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-macos-universal.tar.gz)
 
 ### Install from source
@@ -66,48 +66,44 @@ trew long MIN_MER MAX_MER <long_read_data1.fastq.gz> <long_read_data2.fastq>... 
 MIN_MER : minimum length of sequence to find telomere [MIN_MER >= 3]  
 MAX_MER : maximum length of sequence to find telomere [MAX_MER <= 64]
 
+> Note that to get the correct putative TRM, you must run the program on the same species sequencing data.
+
 The following is a recommended command line to run TREW.
 
 ```sh
-trew short 5 32 <short_read_data1.fastq.gz> <short_read_data2.fastq>... -t <number of threads>
+trew short 5 32 <short_read_species1_data1.fastq.gz> <short_read_species1_data2.fastq>... -t <number of threads>
+trew short 5 32 <short_read_species2_data1.fastq.gz> <short_read_species2_data2.fastq>... -t <number of threads>
 
-trew long 5 32 <long_read_data1.fastq.gz> <long_read_data2.fastq>... -t <number of threads>
+trew long 5 32 <long_read_species1_data1.fastq.gz> <long_read_species1_data2.fastq>... -t <number of threads>
+trew long 5 32 <long_read_species2_data1.fastq.gz> <long_read_species2_data2.fastq>... -t <number of threads>
 ```
 
 ### Output
 
-Short-read sequencing
-
 ```
-><short_read_data1.fastq.gz>
-<length of repeat>,<repeat sequence>,<number of repeat>
-...
-
-><short_read_data2.fastq.gz>
-<length of repeat>,<repeat sequence>,<number of repeat>
-...
-```
-
-Long-read sequencing
-
-```
-><long_read_data1.fastq.gz>
+><read_data1.fastq.gz>
 <length of repeat>,<repeat sequence>,<number of repeat>,<number of reverse repeat>,<number of pure repeat>
-<length of palindromic repeat>,<repeat sequence>,<number of repeat>,_,<number of pure repeat>
+<length of palindromic repeat>,<repeat sequence>,<number of repeat>,-1,<number of pure repeat>
 ...
 
-><long_read_data2.fastq.gz>
+><read_data2.fastq.gz>
 <length of repeat>,<repeat sequence>,<number of repeat>,<number of reverse repeat>,<number of pure repeat>
-<length of palindromic repeat>,<repeat sequence>,<number of repeat>,_,<number of pure repeat>
+<length of palindromic repeat>,<repeat sequence>,<number of repeat>,-1,<number of pure repeat>
 ...
+
+>Putative_TRM
+<putative telomeric repeat motif>,<score>
+...
+or
+NO_PUTATIVE_TRM,-1
 ```
 
-In long-read sequencing data, we count with repeat orientation to accurately recognize TRMs. If the number of repeats and number of reverse repeats are similar, this repeat is very unlikely to be a TRM.
+The value of score can range from 1 to 3, but we recommend checking all putative TRMs regardless of the value of score.
 
 ### Author
 
 Hyunwoo Ryu <wowo0118@korea.ac.kr>
 
-*Special thanks to*  
-Jiho Choi <sdatoli@korea.ac.kr>  
-Kyungmo Ku <kyungmoku7141@gmail.com>  
+*Special thanks to*
+Jiho Choi <sdatoli@korea.ac.kr>
+Kyungmo Ku <kyungmoku7141@gmail.com>
