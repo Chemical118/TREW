@@ -9,9 +9,9 @@ TREW is tool that can identify Telomeric repeat motif (TRM) with any whole-genom
 
 You can install `TREW` by downloading a binary from the release or building from the source.
 
-[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)
-[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)
-[MacOS (x86_64, arm64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-macos-universal.tar.gz)
+[Windows (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-windows-x86_64.tar.gz)  
+[Linux (x86_64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-linux-x86_64.tar.gz)  
+[MacOS (x86_64, arm64)](https://github.com/Chemical118/TREW/releases/latest/download/trew-macos-universal.tar.gz)  
 
 ### Install from source
 
@@ -104,6 +104,6 @@ The value of score can range from 1 to 3, but we recommend checking all putative
 
 Hyunwoo Ryu <wowo0118@korea.ac.kr>
 
-*Special thanks to*
-Jiho Choi <sdatoli@korea.ac.kr>
+*Special thanks to*  
+Jiho Choi <sdatoli@korea.ac.kr>  
 Kyungmo Ku <kyungmoku7141@gmail.com>
