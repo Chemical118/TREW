@@ -15,6 +15,8 @@ You can install `TREW` by downloading a binary from the release or building from
 
 ### Install from source
 
+> We found that Intel® oneAPI DPC++/C++ Compiler has the potential to create ~20% faster programs on Intel® CPUs, especially, using multi-threading.
+
 Windows (Visual Studio)
 
 ```sh
@@ -49,6 +51,41 @@ cmake --build build
 ./build/trew -h
 ```
 
+#### Install from source with Intel® oneAPI DPC++/C++ Compiler
+
+Install compiler at [Intel® oneAPI DPC++/C++ Compiler website](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html#gs.4ooj5x) with default destination.
+
+Windows
+```sh
+git clone https://github.com/Chemical118/TREW.git
+cd TREW
+
+git clone https://github.com/Microsoft/vcpkg.git
+.\vcpkg\bootstrap-vcpkg.bat
+
+mkdir build
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=C:\Program Files (x86)\Intel\oneAPI\compiler\latest\bin\icx.exe -DCMAKE_CXX_COMPILER=C:\Program Files (x86)\Intel\oneAPI\compiler\latest\bin\icx.exe -DCMAKE_TOOLCHAIN_FILE=vcpkg\scripts\buildsystems\vcpkg.cmake
+cmake --build build --config Release
+
+.\build\Release\trew_test.exe -- test\test.fastq.gz test\test.fastq test\test_long.fastq.gz test\test_long.fastq
+.\build\Release\trew.exe -h
+```
+
+Linux
+```sh
+git clone https://github.com/Chemical118/TREW.git
+cd TREW
+
+git clone https://github.com/Microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+
+mkdir build
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=$HOME/intel/oneapi/compiler/latest/bin/icx -DCMAKE_CXX_COMPILER=$HOME/intel/oneapi/compiler/latest/bin/icpx -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+
+./build/trew_test.exe -- test/test.fastq.gz test/test.fastq test/test_long.fastq.gz test/test_long.fastq
+./build/trew -h
+```
 ### Quick Start
 
 Short-read sequencing
@@ -81,12 +118,22 @@ trew long 5 32 <long_read_species2_data1.fastq.gz> <long_read_species2_data2.fas
 ### Output
 
 ```
-><read_data1.fastq.gz>
+>H:<read_data1.fastq.gz>
 <length of repeat>,<repeat sequence>,<number of repeat>,<number of reverse repeat>,<number of pure repeat>
 <length of palindromic repeat>,<repeat sequence>,<number of repeat>,-1,<number of pure repeat>
 ...
 
-><read_data2.fastq.gz>
+>L:<read_data1.fastq.gz>
+<length of repeat>,<repeat sequence>,<number of repeat>,<number of reverse repeat>,<number of pure repeat>
+<length of palindromic repeat>,<repeat sequence>,<number of repeat>,-1,<number of pure repeat>
+...
+
+>H:<read_data2.fastq.gz>
+<length of repeat>,<repeat sequence>,<number of repeat>,<number of reverse repeat>,<number of pure repeat>
+<length of palindromic repeat>,<repeat sequence>,<number of repeat>,-1,<number of pure repeat>
+...
+
+>L:<read_data2.fastq.gz>
 <length of repeat>,<repeat sequence>,<number of repeat>,<number of reverse repeat>,<number of pure repeat>
 <length of palindromic repeat>,<repeat sequence>,<number of repeat>,-1,<number of pure repeat>
 ...
@@ -98,7 +145,9 @@ or
 NO_PUTATIVE_TRM,-1
 ```
 
-The value of score can range from 1 to 3, but we recommend checking all putative TRMs regardless of the value of score.
+`:H` means _high_ baseline search, this raw result might show homogeneous repeats.
+Also, `:L` means _low_ baseline search, this raw result might show heterogeneous repeats.
+The value of score in `Putative_TRM` can range from 1 to 10, but we recommend checking all putative TRMs regardless of the value of score.
 
 ### Author
 

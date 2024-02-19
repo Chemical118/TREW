@@ -10,10 +10,9 @@ int TABLE_MAX_MER;
 int NUM_THREAD;
 int SLICE_LENGTH;
 int QUEUE_SIZE;
-double BASELINE;
 
 int main(int argc, char** argv) {
-    argparse::ArgumentParser program("trew", "0.2.0");
+    argparse::ArgumentParser program("trew", "0.3.0");
 
     argparse::ArgumentParser long_command("long");
     argparse::ArgumentParser short_command("short");
@@ -59,12 +58,6 @@ int main(int argc, char** argv) {
             .scan<'d', int>()
             .metavar("QUEUE_SIZE");
 
-    long_command.add_argument("-b", "--baseline")
-            .help("BASELINE for repeat read [" + std::to_string(LOW_BASELINE) + " <= BASELINE <= 1]")
-            .default_value(0.8)
-            .scan<'g', double>()
-            .metavar("BASELINE");
-
     short_command.add_argument("MIN_MER")
             .help("minimum length of sequence to find telomere [MIN_MER >= " + std::to_string(ABS_MIN_MER) + "]")
             .nargs(1)
@@ -75,7 +68,7 @@ int main(int argc, char** argv) {
             .nargs(1)
             .scan<'d', int>();
 
-    short_command.add_argument("FASTQ_LOC")
+    short_command.add_argument("SHORT_FASTQ_LOC")
             .help("locations of FASTQ file")
             .nargs(argparse::nargs_pattern::at_least_one);
 
@@ -96,12 +89,6 @@ int main(int argc, char** argv) {
             .default_value(-1)
             .scan<'d', int>()
             .metavar("QUEUE_SIZE");
-
-    short_command.add_argument("-b", "--baseline")
-            .help("BASELINE for repeat read [" + std::to_string(LOW_BASELINE) + " <= BASELINE <= 1]")
-            .default_value(0.8)
-            .scan<'g', double>()
-            .metavar("BASELINE");
 
     program.add_subparser(long_command);
     program.add_subparser(short_command);
@@ -131,7 +118,6 @@ int main(int argc, char** argv) {
             TABLE_MAX_MER = long_command.get<int>("--table_max_mer");
             SLICE_LENGTH = long_command.get<int>("--slice_length");
             QUEUE_SIZE = long_command.get<int>("--queue_size");
-            BASELINE = long_command.get<double>("--baseline");
 
             // argument check
             if (MIN_MER > MAX_MER) {
@@ -161,11 +147,6 @@ int main(int argc, char** argv) {
 
             if (QUEUE_SIZE != -1 && QUEUE_SIZE < 4) {
                 fprintf(stderr, "QUEUE_SIZE must be -1 (unlimited) or greater than or equal to 4.\n");
-                throw std::exception();
-            }
-
-            if (LOW_BASELINE > BASELINE || BASELINE > 1) {
-                fprintf(stderr, "BASELINE must be at least %.1f and no more than 1.\n", LOW_BASELINE);
                 throw std::exception();
             }
 
@@ -217,14 +198,14 @@ int main(int argc, char** argv) {
             extract_k_mer_ans = set_extract_k_mer_ans();
         }
 
+        FinalFastqData* total_result_low = new FinalFastqData {};
+        FinalFastqData* total_result_high = new FinalFastqData {};
+
         ThreadData* thread_data_list = new ThreadData[NUM_THREAD];
-        FinalFastqData* total_result = new FinalFastqData {};
-        FinalFastqVector* temp_fastq_vector;
+        FinalFastqVectorPair temp_fastq_vector_pair;
 
         std::vector<std::string> gz_extension_list = std::vector<std::string> {".gz", ".bgz"};
         for (const auto& fastq_path : fastq_path_list) {
-            fprintf(stdout, ">%s\n", std::filesystem::canonical(fastq_path).string().c_str());
-
             bool is_gz = false;
             std::string fastq_ext = fastq_path.extension().string();
             for (const auto& ext : gz_extension_list) {
@@ -234,102 +215,31 @@ int main(int argc, char** argv) {
                 }
             }
 
-            temp_fastq_vector = process_kmer_long(fastq_path.string().c_str(), repeat_check_table, rot_table,
-                                                  extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                                  thread_data_list, is_gz);
-            
-            for (auto& [k, v] : *temp_fastq_vector) {
-                if (total_result -> contains(k)) {
-                    (*total_result)[k] = add_data((*total_result)[k], v);
+            temp_fastq_vector_pair = process_kmer_long(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
+                                                       extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
+                                                       thread_data_list, is_gz);
+
+            for (auto& [k, v] : *temp_fastq_vector_pair.first) {
+                if (total_result_high -> contains(k)) {
+                    (*total_result_high)[k] = add_data((*total_result_high)[k], v);
                 } else {
-                    (*total_result)[k] = v;
+                    (*total_result_high)[k] = v;
                 }
             }
-            delete temp_fastq_vector;
-            
+            for (auto& [k, v] : *temp_fastq_vector_pair.second) {
+                if (total_result_low -> contains(k)) {
+                    (*total_result_low)[k] = add_data((*total_result_low)[k], v);
+                } else {
+                    (*total_result_low)[k] = v;
+                }
+            }
+
+            delete temp_fastq_vector_pair.first;
+            delete temp_fastq_vector_pair.second;
         }
 
-        bool max_cnt_check = false;
-        for (auto& [k, v] : *total_result) {
-            if (v.forward + v.backward + v.both >= ANS_COUNT) {
-                max_cnt_check = true;
-                break;
-            }
-        }
-
-        fprintf(stdout, ">Putative_TRM\n");
-        if (max_cnt_check) {
-            int64_t _tcnt;
-            FinalFastqVector total_result_vector {};
-            for (auto& [k, v] : *total_result) {
-                if (v.forward + v.backward + v.both > PRINT_COUNT) {
-                    if (v.backward > v.forward) {
-                        _tcnt = v.forward;
-                        v.forward = v.backward;
-                        v.backward = _tcnt;
-                    }
-
-                    total_result_vector.emplace_back(k ,v);
-                }
-            }
-
-            FinalFastqData ratio_result {};
-            ResultMap score_result_map {};
-
-            std::sort(total_result_vector.begin(), total_result_vector.end(), [](auto &a, auto &b) {
-                return a.second.forward > b.second.forward;
-            });
-
-            for (int i = 0; i < MIN(10, total_result_vector.size()); i++) {
-                if (total_result_vector[i].second.forward == 0) {
-                    break;
-                }
-                if (i < 3) {
-                    score_result_map[total_result_vector[i].first] += 1;
-                }
-                if (total_result_vector[i].second.backward >= 0) {
-                    ratio_result[total_result_vector[i].first] = total_result_vector[i].second;
-                }
-            }
-
-            std::sort(total_result_vector.begin(), total_result_vector.end(), [](auto &a, auto &b) {
-                return a.second.forward + a.second.backward + a.second.both > b.second.forward + b.second.backward + b.second.both;
-            });
-
-            for (int i = 0; i < MIN(10, total_result_vector.size()); i++) {
-                if (i < 3) {
-                    score_result_map[total_result_vector[i].first] += 1;
-                }
-                if (total_result_vector[i].second.forward > 0 && total_result_vector[i].second.backward >= 0) {
-                    ratio_result[total_result_vector[i].first] = total_result_vector[i].second;
-                }
-            }
-
-            FinalFastqVector ratio_result_vector(ratio_result.begin(), ratio_result.end());
-            std::sort(ratio_result_vector.begin(), ratio_result_vector.end(), [](auto &a, auto &b) {
-                return (double) a.second.backward / a.second.forward < (double) b.second.backward / b.second.forward;
-            });
-
-            for (int i = 0; i < MIN(3, ratio_result_vector.size()); i++) {
-                score_result_map[ratio_result_vector[i].first] += 1;
-            }
-
-            std::vector<std::pair<KmerSeq, uint32_t>> score_result_vector(score_result_map.begin(), score_result_map.end());
-            std::sort(score_result_vector.begin(), score_result_vector.end(), [](auto &a, auto &b) {
-                return a.second > b.second;
-            });
-
-            char buffer[ABS_MAX_MER + 1];
-            for (auto& [k, v] : score_result_vector) {
-                int_to_four(buffer, k.second, k.first);
-                fprintf(stdout, "%s,%" PRIu32"\n", buffer, v);
-            }
-        } else {
-            fprintf(stdout, "NO_PUTATIVE_TRM,-1\n");
-        }
-
-        delete total_result;
         delete[] thread_data_list;
+        final_process_output(total_result_high, total_result_low);
     }
     else if (program.is_subcommand_used("short")) {
         try {
@@ -338,7 +248,6 @@ int main(int argc, char** argv) {
             NUM_THREAD = short_command.get<int>("--thread");
             TABLE_MAX_MER = short_command.get<int>("--table_max_mer");
             QUEUE_SIZE = short_command.get<int>("--queue_size");
-            BASELINE = short_command.get<double>("--baseline");
 
             // argument check
             if (MIN_MER > MAX_MER) {
@@ -366,11 +275,6 @@ int main(int argc, char** argv) {
                 throw std::exception();
             }
 
-            if (LOW_BASELINE > BASELINE || BASELINE > 1) {
-                fprintf(stderr, "BASELINE must be at least %.1f and no more than 1.\n", LOW_BASELINE);
-                throw std::exception();
-            }
-
             if (TABLE_MAX_MER <= 0) {
                 fprintf(stderr, "TABLE_MAX_MER must be positive.\n");
                 throw std::exception();
@@ -386,7 +290,7 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        std::vector<std::string> fastq_loc_list = short_command.get<std::vector<std::string>>("FASTQ_LOC");
+        std::vector<std::string> fastq_loc_list = short_command.get<std::vector<std::string>>("SHORT_FASTQ_LOC");
         std::vector<std::filesystem::path> fastq_path_list {};
 
         for (const auto& fastq_loc : fastq_loc_list) {
@@ -419,14 +323,14 @@ int main(int argc, char** argv) {
             extract_k_mer_ans = set_extract_k_mer_ans();
         }
 
+        FinalFastqData* total_result_low = new FinalFastqData {};
+        FinalFastqData* total_result_high = new FinalFastqData {};
+
         ThreadData* thread_data_list = new ThreadData[NUM_THREAD];
-        FinalFastqData* total_result = new FinalFastqData {};
-        FinalFastqVector* temp_fastq_vector;
+        FinalFastqVectorPair temp_fastq_vector_pair;
 
         std::vector<std::string> gz_extension_list = std::vector<std::string> {".gz", ".bgz"};
         for (const auto& fastq_path : fastq_path_list) {
-            fprintf(stdout, ">%s\n", std::filesystem::canonical(fastq_path).string().c_str());
-
             bool is_gz = false;
             std::string fastq_ext = fastq_path.extension().string();
             for (const auto& ext : gz_extension_list) {
@@ -436,101 +340,31 @@ int main(int argc, char** argv) {
                 }
             }
 
-            temp_fastq_vector = process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
-                                             extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                             thread_data_list, is_gz);
+            temp_fastq_vector_pair = process_kmer(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
+                                                  extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
+                                                  thread_data_list, is_gz);
 
-            for (auto& [k, v] : *temp_fastq_vector) {
-                if (total_result -> contains(k)) {
-                    (*total_result)[k] = add_data((*total_result)[k], v);
+            for (auto& [k, v] : *temp_fastq_vector_pair.first) {
+                if (total_result_high -> contains(k)) {
+                    (*total_result_high)[k] = add_data((*total_result_high)[k], v);
                 } else {
-                    (*total_result)[k] = v;
+                    (*total_result_high)[k] = v;
                 }
             }
-            delete temp_fastq_vector;
+            for (auto& [k, v] : *temp_fastq_vector_pair.second) {
+                if (total_result_low -> contains(k)) {
+                    (*total_result_low)[k] = add_data((*total_result_low)[k], v);
+                } else {
+                    (*total_result_low)[k] = v;
+                }
+            }
+
+            delete temp_fastq_vector_pair.first;
+            delete temp_fastq_vector_pair.second;
         }
 
-        bool max_cnt_check = false;
-        for (auto& [k, v] : *total_result) {
-            if (v.forward + v.backward + v.both >= ANS_COUNT) {
-                max_cnt_check = true;
-                break;
-            }
-        }
-
-        fprintf(stdout, ">Putative_TRM\n");
-        if (max_cnt_check) {
-            int64_t _tcnt;
-            FinalFastqVector total_result_vector {};
-            for (auto& [k, v] : *total_result) {
-                if (v.forward + v.backward + v.both > PRINT_COUNT) {
-                    if (v.backward > v.forward) {
-                        _tcnt = v.forward;
-                        v.forward = v.backward;
-                        v.backward = _tcnt;
-                    }
-
-                    total_result_vector.emplace_back(k ,v);
-                }
-            }
-
-            FinalFastqData ratio_result {};
-            ResultMap score_result_map {};
-
-            std::sort(total_result_vector.begin(), total_result_vector.end(), [](auto &a, auto &b) {
-                return a.second.forward > b.second.forward;
-            });
-
-            for (int i = 0; i < MIN(10, total_result_vector.size()); i++) {
-                if (total_result_vector[i].second.forward == 0) {
-                    break;
-                }
-                if (i < 3) {
-                    score_result_map[total_result_vector[i].first] += 1;
-                }
-                if (total_result_vector[i].second.backward >= 0) {
-                    ratio_result[total_result_vector[i].first] = total_result_vector[i].second;
-                }
-            }
-
-            std::sort(total_result_vector.begin(), total_result_vector.end(), [](auto &a, auto &b) {
-                return a.second.forward + a.second.backward + a.second.both > b.second.forward + b.second.backward + b.second.both;
-            });
-
-            for (int i = 0; i < MIN(10, total_result_vector.size()); i++) {
-                if (i < 3) {
-                    score_result_map[total_result_vector[i].first] += 1;
-                }
-                if (total_result_vector[i].second.forward > 0 && total_result_vector[i].second.backward >= 0) {
-                    ratio_result[total_result_vector[i].first] = total_result_vector[i].second;
-                }
-            }
-
-            FinalFastqVector ratio_result_vector(ratio_result.begin(), ratio_result.end());
-            std::sort(ratio_result_vector.begin(), ratio_result_vector.end(), [](auto &a, auto &b) {
-                return (double) a.second.backward / a.second.forward < (double) b.second.backward / b.second.forward;
-            });
-
-            for (int i = 0; i < MIN(3, ratio_result_vector.size()); i++) {
-                score_result_map[ratio_result_vector[i].first] += 1;
-            }
-
-            std::vector<std::pair<KmerSeq, uint32_t>> score_result_vector(score_result_map.begin(), score_result_map.end());
-            std::sort(score_result_vector.begin(), score_result_vector.end(), [](auto &a, auto &b) {
-                return a.second > b.second;
-            });
-
-            char buffer[ABS_MAX_MER + 1];
-            for (auto& [k, v] : score_result_vector) {
-                int_to_four(buffer, k.second, k.first);
-                fprintf(stdout, "%s,%" PRIu32"\n", buffer, v);
-            }
-        } else {
-            fprintf(stdout, "NO_PUTATIVE_TRM,-1\n");
-        }
-
-        delete total_result;
         delete[] thread_data_list;
+        final_process_output(total_result_high, total_result_low);
     }
     else {
         std::cerr << program;

@@ -8,11 +8,19 @@
 #define LENGTH (1 << 22)
 #define MAX_SEQ 1000
 
-#define DNA_COUNT 1
-#define PRINT_COUNT 10
-#define ANS_COUNT 100
-
+#define ABS_MAX_ANS_NUM 10
 #define LOW_BASELINE 0.5
+#define HIGH_BASELINE 0.8
+
+#define ABS_MIN_DNA_COUNT 1
+#define ABS_MIN_PRINT_COUNT 10
+#define ABS_MIN_ANS_COUNT 20
+
+#define NUM_FOR_MAX_COUNT 4
+#define NUM_TOT_MAX_COUNT 4
+#define NUM_RAT_MAX_COUNT 4
+#define NUM_RAT_CAND 20
+
 #define ABS_MIN_MER 3
 #define ABS_TABLE_MAX_MER 15
 #define ABS_UINT64_MAX_MER 32
@@ -44,7 +52,6 @@ extern int TABLE_MAX_MER;
 extern int NUM_THREAD;
 extern int SLICE_LENGTH;
 extern int QUEUE_SIZE;
-extern double BASELINE;
 
 template <typename T>
 struct FinalData {
@@ -58,7 +65,8 @@ typedef std::tuple<uint16_t**, uint64_t**, uint128_t**, uint32_t**> ThreadDataTu
 
 typedef std::pair<int, uint128_t> KmerSeq;
 typedef boost::unordered_map<KmerSeq, uint32_t> ResultMap;
-typedef FinalData<ResultMap*> ResultMapData;
+typedef std::pair<ResultMap*, ResultMap*> ResultMapPair;
+typedef FinalData<ResultMapPair> ResultMapData;
 
 typedef std::vector<std::pair<int, int>> LocationVector;
 
@@ -67,6 +75,9 @@ typedef boost::unordered_map<uint128_t, uint16_t> CounterMap_128;
 
 typedef boost::unordered_map<KmerSeq, FinalData<int64_t>> FinalFastqData;
 typedef std::vector<std::pair<KmerSeq, FinalData<int64_t>>> FinalFastqVector;
+typedef std::pair<FinalFastqVector*, FinalFastqVector*> FinalFastqVectorPair;
+
+typedef std::pair<int, int> KmerData;
 
 struct QueueData {
     char* buffer;
@@ -134,37 +145,39 @@ void read_fastq_gz_thread_long(gzFile fp, TBBQueue* buffer_task_queue);
 
 void int_to_four(char* buffer, uint128_t seq, int n);
 
-FinalFastqVector* process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
-                               uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                               ThreadData* thread_data_list, bool is_gz);
+FinalFastqVectorPair process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
+                                  uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
+                                  ThreadData* thread_data_list, bool is_gz);
 
-FinalFastqVector* process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
+FinalFastqVectorPair process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                     uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
                                     ThreadData* thread_data_list, bool is_gz);
 
-int k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t *extract_k_mer,
-                uint16_t** k_mer_counter, CounterMap* k_mer_counter_map,
-                uint64_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
-                ResultMap* result,
-                int16_t* k_mer_total_cnt, int min_mer, int max_mer);
+FinalFastqVectorPair process_output(const char* file_name, ResultMapData* result_list, uint32_t **rot_table, uint128_t *extract_k_mer_ans);
 
-int k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint128_t *extract_k_mer,
-                    uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
-                    uint128_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
-                    ResultMap* result,
-                    int16_t* k_mer_total_cnt, int min_mer, int max_mer);
+KmerData k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t *extract_k_mer,
+                     uint16_t** k_mer_counter, CounterMap* k_mer_counter_map,
+                     uint64_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
+                     ResultMapPair result_pair,
+                     int16_t* k_mer_total_cnt, int min_mer, int max_mer);
+
+KmerData k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint128_t *extract_k_mer,
+                         uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
+                         uint128_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
+                         ResultMapPair result_pair,
+                         int16_t* k_mer_total_cnt, int min_mer, int max_mer);
 
 void k_mer_target(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t *extract_k_mer,
                   uint16_t** k_mer_counter, CounterMap* k_mer_counter_map,
                   uint64_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
-                  ResultMap* result,
+                  ResultMapPair result_pair,
                   int16_t* k_mer_total_cnt,
                   int k);
 
 void k_mer_target_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint128_t *extract_k_mer,
                       uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
                       uint128_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
-                      ResultMap* result,
+                      ResultMapPair result_pair,
                       int16_t* k_mer_total_cnt,
                       int k);
 
@@ -175,10 +188,15 @@ uint128_t get_rot_seq_128(const uint128_t& seq, int k);
 
 uint8_t get_repeat_check(uint64_t seq, int k);
 uint8_t get_repeat_check(uint128_t seq, int k);
+int get_dna_count(uint128_t seq, int k);
 
 uint32_t reverse_complement_32(uint32_t x);
 uint64_t reverse_complement_64(uint64_t x);
 uint128_t reverse_complement_128(uint128_t x);
 
 FinalData<int64_t> add_data(FinalData<int64_t> a, FinalData<int64_t> b);
+
+void final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low);
+ResultMap* get_score_map(FinalFastqData* total_result);
+
 #endif //TROW_KMER_H

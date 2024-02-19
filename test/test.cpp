@@ -44,7 +44,6 @@ int TABLE_MAX_MER;
 int NUM_THREAD;
 int SLICE_LENGTH;
 int QUEUE_SIZE = -1;
-double BASELINE;
 
 // test function
 std::string operator*(std::string& s, size_t n) {
@@ -95,7 +94,7 @@ BOOST_AUTO_TEST_CASE(get_rot_seq_test) {
 BOOST_AUTO_TEST_CASE(get_repeat_check_test) {
     std::string buffer_s;
     buffer_s = "ATTTTTTT";
-    BOOST_CHECK_EQUAL(get_repeat_check(four_to_int(buffer_s), buffer_s.length()), 1);
+    BOOST_CHECK_EQUAL(get_repeat_check(four_to_int(buffer_s), buffer_s.length()), 0);
 
     buffer_s = "ATTTTTTTGC";
     BOOST_CHECK_EQUAL(get_repeat_check(four_to_int(buffer_s), buffer_s.length()), 0);
@@ -108,7 +107,6 @@ BOOST_AUTO_TEST_CASE(k_mer_total_cnt_test) {
     MAX_MER = 21;
     MIN_MER = 5;
     TABLE_MAX_MER = 13;
-    BASELINE = 0.8;
     NUM_THREAD = 1;
 
     std::string buffer_s = "ATGCATCACACTCGCCGATGCATCACNNNNNNNNNGCCGATGCATCACACTCGCCGNTGCATCACACTCGCCGATGCATC"
@@ -170,7 +168,6 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
     MAX_MER = 32;
     MIN_MER = 5;
     TABLE_MAX_MER = 13;
-    BASELINE = 0.8;
     NUM_THREAD = 1;
 
     uint128_t seq_rev;
@@ -182,7 +179,7 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
     uint32_t **k_mer_counter_list = set_k_mer_counter_list();
 
     CounterMap* k_mer_counter_map = new CounterMap[MAX_MER - TABLE_MAX_MER];
-    ResultMap* result = new ResultMap {};
+    ResultMapPair result = {new ResultMap {}, new ResultMap {}};
     int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
 
     std::vector<std::string> repeat_list = {"TTGCATCACACCCTCGCCG", "TTAGGG", "TTAGAGCCCACA", "TTTTGCCCTCATCACACCCTCGCCTCCTTCGC"};
@@ -195,15 +192,16 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
         k_mer_check(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                     k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt, MIN_MER, MAX_MER);
 
-        BOOST_CHECK_EQUAL(result -> size(), 1);
-        for(auto& [k, v] : (*result)) {
+        BOOST_CHECK_EQUAL(result.first -> size(), 1);
+        for(auto& [k, v] : (*(result.first))) {
             seq_rev = get_rot_seq_128(reverse_complement_128(k.second) >> (2 * (64 - k.first)), k.first);
 
             BOOST_CHECK_EQUAL(repeat_len, k.first);
             BOOST_CHECK_EQUAL(min_repeat_seq, MIN(k.second, seq_rev));
             BOOST_CHECK_EQUAL(repeat_len * (20 - 1) + 1, v);
         }
-        result -> clear();
+        result.first -> clear();
+        result.second -> clear();
     }
 }
 
@@ -211,7 +209,6 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
     MAX_MER = 64;
     MIN_MER = 5;
     TABLE_MAX_MER = 13;
-    BASELINE = 0.8;
     NUM_THREAD = 1;
 
     uint128_t seq_rev;
@@ -223,7 +220,7 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
     uint32_t **k_mer_counter_list = set_k_mer_counter_list();
 
     CounterMap_128* k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
-    ResultMap* result = new ResultMap {};
+    ResultMapPair result = {new ResultMap {}, new ResultMap {}};
     int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
 
     std::vector<std::string> repeat_list = {"TGCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "TTAGGG", "TTAGAGCCCACA", "TTTTGCCCTCATCACACCCTCGCCTCCTTCGC", "TTTTGCCCTCATCACACCCTCGCCTCCTTCGTGCTTGCCCCCACACTGACTGACGTGCAGTCTG"};
@@ -236,15 +233,16 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
         k_mer_check_128(buffer.c_str(), 0, (int) buffer.length() - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                         k_mer_data, k_mer_counter_list, repeat_check_table, result, k_mer_total_cnt, MIN_MER, MAX_MER);
 
-        BOOST_CHECK_EQUAL(result -> size(), 1);
-        for(auto& [k, v] : (*result)) {
+        BOOST_CHECK_EQUAL(result.first -> size(), 1);
+        for(auto& [k, v] : (*(result.first))) {
             seq_rev = get_rot_seq_128(reverse_complement_128(k.second) >> (2 * (64 - k.first)), k.first);
 
             BOOST_CHECK_EQUAL(repeat_len, k.first);
             BOOST_CHECK_EQUAL(min_repeat_seq, MIN(k.second, seq_rev));
             BOOST_CHECK_EQUAL(repeat_len * (10 - 1) + 1, v);
         }
-        result -> clear();
+        result.first -> clear();
+        result.second -> clear();
     }
 }
 
@@ -252,7 +250,6 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
     MAX_MER = 32;
     MIN_MER = 5;
     TABLE_MAX_MER = 1;
-    BASELINE = 0.8;
 
     uint8_t **repeat_check_table = nullptr;
     uint32_t **rot_table = nullptr;
@@ -299,7 +296,6 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
     MAX_MER = 64;
     MIN_MER = 5;
     TABLE_MAX_MER = 1;
-    BASELINE = 0.8;
 
     uint8_t **repeat_check_table = nullptr;
     uint32_t **rot_table = nullptr;
@@ -347,7 +343,6 @@ BOOST_AUTO_TEST_CASE(main_test_long_32) {
     MIN_MER = 5;
     TABLE_MAX_MER = 1;
     SLICE_LENGTH = 150;
-    BASELINE = 0.8;
 
     uint8_t **repeat_check_table = nullptr;
     uint32_t **rot_table = nullptr;
@@ -394,7 +389,6 @@ BOOST_AUTO_TEST_CASE(main_test_long_64) {
     MIN_MER = 5;
     TABLE_MAX_MER = 1;
     SLICE_LENGTH = 150;
-    BASELINE = 0.8;
 
     uint8_t **repeat_check_table = nullptr;
     uint32_t **rot_table = nullptr;
