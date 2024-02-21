@@ -47,7 +47,7 @@ mkdir build
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build
 
-./build/trew_test.exe -- test/test.fastq.gz test/test.fastq test/test_long.fastq.gz test/test_long.fastq
+./build/trew_test -- test/test.fastq.gz test/test.fastq test/test_long.fastq.gz test/test_long.fastq
 ./build/trew -h
 ```
 
@@ -83,7 +83,7 @@ mkdir build
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=$HOME/intel/oneapi/compiler/latest/bin/icx -DCMAKE_CXX_COMPILER=$HOME/intel/oneapi/compiler/latest/bin/icpx -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build
 
-./build/trew_test.exe -- test/test.fastq.gz test/test.fastq test/test_long.fastq.gz test/test_long.fastq
+./build/trew_test -- test/test.fastq.gz test/test.fastq test/test_long.fastq.gz test/test_long.fastq
 ./build/trew -h
 ```
 ### Quick Start

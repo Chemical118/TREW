@@ -269,7 +269,7 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
     }
 
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
-    if (boost::unit_test::framework::master_test_suite().argc == 3) {
+    if (boost::unit_test::framework::master_test_suite().argc == 5) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[1]), true},
                            {fs::path(boost::unit_test::framework::master_test_suite().argv[2]), false}};
     }
@@ -315,7 +315,7 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
     }
 
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
-    if (boost::unit_test::framework::master_test_suite().argc == 3) {
+    if (boost::unit_test::framework::master_test_suite().argc == 5) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[1]), true},
                            {fs::path(boost::unit_test::framework::master_test_suite().argv[2]), false}};
     }
@@ -362,7 +362,7 @@ BOOST_AUTO_TEST_CASE(main_test_long_32) {
     }
 
     std::vector<std::pair<fs::path, bool>> FILE_LOC_VECTOR;
-    if (boost::unit_test::framework::master_test_suite().argc == 3) {
+    if (boost::unit_test::framework::master_test_suite().argc == 5) {
         FILE_LOC_VECTOR = {{fs::path(boost::unit_test::framework::master_test_suite().argv[3]), true},
                            {fs::path(boost::unit_test::framework::master_test_suite().argv[4]), false}};
     }
