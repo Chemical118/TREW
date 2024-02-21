@@ -12,7 +12,7 @@ int SLICE_LENGTH;
 int QUEUE_SIZE;
 
 int main(int argc, char** argv) {
-    argparse::ArgumentParser program("trew", "0.3.0");
+    argparse::ArgumentParser program("trew", "0.3.1");
 
     argparse::ArgumentParser long_command("long");
     argparse::ArgumentParser short_command("short");
