@@ -15,8 +15,6 @@ You can install `TREW` by downloading a binary from the release or building from
 
 ### Install from source
 
-> We found that Intel® oneAPI DPC++/C++ Compiler has the potential to create ~20% faster programs on Intel® CPUs, especially, using multi-threading.
-
 Windows (Visual Studio)
 
 ```sh
@@ -52,6 +50,7 @@ cmake --build build
 ```
 
 #### Install from source with Intel® oneAPI DPC++/C++ Compiler
+> We found that Intel® oneAPI DPC++/C++ Compiler has the potential to create ~20% faster programs on Intel® CPUs, especially, using multi-threading.
 
 Install compiler at [Intel® oneAPI DPC++/C++ Compiler website](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html#gs.4ooj5x) with default destination.
 
