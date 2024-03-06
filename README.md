@@ -146,7 +146,7 @@ NO_PUTATIVE_TRM,-1
 
 `:H` means _high_ baseline search, this raw result might show homogeneous repeats.
 Also, `:L` means _low_ baseline search, this raw result might show heterogeneous repeats.
-The value of score in `Putative_TRM` can range from 1 to 10, but we recommend checking all putative TRMs regardless of the value of score.
+The value of score in `Putative_TRM` can range from 1 to 7, but we recommend checking all putative TRMs regardless of the value of score.
 
 ### Author
 
