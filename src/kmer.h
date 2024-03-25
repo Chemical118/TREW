@@ -34,11 +34,12 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+#include <ankerl/unordered_dense.h>
+
 #include <tuple>
 #include <cstdint>
 #include <cinttypes>
 
-#include <boost/unordered_map.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 
 #include <tbb/concurrent_queue.h>
@@ -64,16 +65,16 @@ typedef boost::multiprecision::uint128_t uint128_t;
 typedef std::tuple<uint16_t**, uint64_t**, uint128_t**, uint32_t**> ThreadDataTuple;
 
 typedef std::pair<int, uint128_t> KmerSeq;
-typedef boost::unordered_map<KmerSeq, uint32_t> ResultMap;
+typedef ankerl::unordered_dense::map<KmerSeq, uint32_t> ResultMap;
 typedef std::pair<ResultMap*, ResultMap*> ResultMapPair;
 typedef FinalData<ResultMapPair> ResultMapData;
 
 typedef std::vector<std::pair<int, int>> LocationVector;
 
-typedef boost::unordered_map<uint64_t, uint16_t> CounterMap;
-typedef boost::unordered_map<uint128_t, uint16_t> CounterMap_128;
+typedef ankerl::unordered_dense::map<uint64_t, uint16_t> CounterMap;
+typedef ankerl::unordered_dense::map<uint128_t, uint16_t> CounterMap_128;
 
-typedef boost::unordered_map<KmerSeq, FinalData<int64_t>> FinalFastqData;
+typedef ankerl::unordered_dense::map<KmerSeq, FinalData<int64_t>> FinalFastqData;
 typedef std::vector<std::pair<KmerSeq, FinalData<int64_t>>> FinalFastqVector;
 typedef std::pair<FinalFastqVector*, FinalFastqVector*> FinalFastqVectorPair;
 
