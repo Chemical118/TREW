@@ -54,11 +54,11 @@ uint64_t reverse_complement_64(uint64_t x) {
     return ~x;
 }
 
-static const uint128_t rev_cmp[5] = {uint128_t("0x00000000ffffffff00000000ffffffff"),
-                                     uint128_t("0x0000ffff0000ffff0000ffff0000ffff"),
-                                     uint128_t("0x00ff00ff00ff00ff00ff00ff00ff00ff"),
-                                     uint128_t("0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"),
-                                     uint128_t("0x33333333333333333333333333333333")};
+static const uint128_t rev_cmp[5] = {absl::MakeUint128(0x00000000ffffffff, 0x00000000ffffffff),
+                                     absl::MakeUint128(0x0000ffff0000ffff, 0x0000ffff0000ffff),
+                                     absl::MakeUint128(0x00ff00ff00ff00ff, 0x00ff00ff00ff00ff),
+                                     absl::MakeUint128(0x0f0f0f0f0f0f0f0f, 0x0f0f0f0f0f0f0f0f),
+                                     absl::MakeUint128(0x3333333333333333, 0x3333333333333333)};
 
 uint128_t reverse_complement_128(uint128_t x) {
     x = (x >> 64) | (x << 64);
