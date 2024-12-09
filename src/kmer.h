@@ -9,8 +9,6 @@
 #define MAX_SEQ 1000
 
 #define ABS_MAX_ANS_NUM 10
-#define LOW_BASELINE 0.5
-#define HIGH_BASELINE 0.8
 
 #define ABS_MIN_DNA_COUNT 1
 #define ABS_MIN_PRINT_COUNT 10
@@ -52,6 +50,8 @@ extern int TABLE_MAX_MER;
 extern int NUM_THREAD;
 extern int SLICE_LENGTH;
 extern int QUEUE_SIZE;
+extern double LOW_BASELINE;
+extern double HIGH_BASELINE;
 
 template <typename T>
 struct FinalData {

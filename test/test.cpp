@@ -45,6 +45,9 @@ int NUM_THREAD;
 int SLICE_LENGTH;
 int QUEUE_SIZE = -1;
 
+double LOW_BASELINE;
+double HIGH_BASELINE;
+
 // test function
 std::string operator*(std::string& s, size_t n) {
     std::string result;
@@ -170,6 +173,9 @@ BOOST_AUTO_TEST_CASE(k_mer_test) {
     TABLE_MAX_MER = 13;
     NUM_THREAD = 1;
 
+    LOW_BASELINE = 0.5;
+    HIGH_BASELINE = 0.8;
+
     uint128_t seq_rev;
     uint8_t **repeat_check_table = set_repeat_check_table();
     uint32_t **rot_table = set_rotation_table(repeat_check_table);
@@ -210,6 +216,9 @@ BOOST_AUTO_TEST_CASE(k_mer_128_test) {
     MIN_MER = 5;
     TABLE_MAX_MER = 13;
     NUM_THREAD = 1;
+
+    LOW_BASELINE = 0.5;
+    HIGH_BASELINE = 0.8;
 
     uint128_t seq_rev;
     uint8_t **repeat_check_table = set_repeat_check_table();

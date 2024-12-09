@@ -11,8 +11,11 @@ int NUM_THREAD;
 int SLICE_LENGTH;
 int QUEUE_SIZE;
 
+double LOW_BASELINE;
+double HIGH_BASELINE;
+
 int main(int argc, char** argv) {
-    argparse::ArgumentParser program("trew", "0.4.0");
+    argparse::ArgumentParser program("trew", "0.5.0");
 
     argparse::ArgumentParser long_command("long");
     argparse::ArgumentParser short_command("short");
@@ -45,6 +48,18 @@ int main(int argc, char** argv) {
             .default_value(12)
             .scan<'d', int>()
             .metavar("TABLE_MAX_MER");
+
+    long_command.add_argument("-l", "--low_baseline")
+            .help("Low baseline for k-mer telomere counting")
+            .default_value(0.5)
+            .scan<'f', double>()
+            .metavar("LOW_BASELINE");
+
+    long_command.add_argument("-h", "--high_baseline")
+            .help("High baseline for k-mer telomere counting")
+            .default_value(0.8)
+            .scan<'f', double>()
+            .metavar("HIGH_BASELINE");
 
     long_command.add_argument("-s", "--slice_length")
             .help("length of sequence to slice each side of read [SLICE_LENGTH >= 2 * MAX_MER]")
@@ -84,6 +99,18 @@ int main(int argc, char** argv) {
             .scan<'d', int>()
             .metavar("TABLE_MAX_MER");
 
+    short_command.add_argument("-l", "--low_baseline")
+            .help("Low baseline for k-mer telomere counting")
+            .default_value(0.5)
+            .scan<'f', double>()
+            .metavar("LOW_BASELINE");
+
+    short_command.add_argument("-h", "--high_baseline")
+            .help("High baseline for k-mer telomere counting")
+            .default_value(0.8)
+            .scan<'f', double>()
+            .metavar("HIGH_BASELINE");
+
     short_command.add_argument("-q", "--queue_size")
             .help("size of buffer queue in MiB [QUEUE_SIZE >= 4, unlimited : -1]")
             .default_value(-1)
@@ -118,6 +145,8 @@ int main(int argc, char** argv) {
             TABLE_MAX_MER = long_command.get<int>("--table_max_mer");
             SLICE_LENGTH = long_command.get<int>("--slice_length");
             QUEUE_SIZE = long_command.get<int>("--queue_size");
+            LOW_BASELINE = long_command.get<double>("--low_baseline");
+            HIGH_BASELINE = long_command.get<double>("--high_baseline");
 
             // argument check
             if (MIN_MER > MAX_MER) {
@@ -157,6 +186,11 @@ int main(int argc, char** argv) {
 
             if (NUM_THREAD <= 0) {
                 fprintf(stderr, "number of threads must be positive.\n");
+                throw std::exception();
+            }
+
+            if (!(0 < LOW_BASELINE && LOW_BASELINE <= 1) || !(0 < HIGH_BASELINE && HIGH_BASELINE <= 1)) {
+                fprintf(stderr, "Baseline must be in range 0 to 1.\n");
                 throw std::exception();
             }
         }
@@ -248,6 +282,8 @@ int main(int argc, char** argv) {
             NUM_THREAD = short_command.get<int>("--thread");
             TABLE_MAX_MER = short_command.get<int>("--table_max_mer");
             QUEUE_SIZE = short_command.get<int>("--queue_size");
+            LOW_BASELINE = short_command.get<double>("--low_baseline");
+            HIGH_BASELINE = short_command.get<double>("--high_baseline");
 
             // argument check
             if (MIN_MER > MAX_MER) {
@@ -282,6 +318,11 @@ int main(int argc, char** argv) {
 
             if (NUM_THREAD <= 0) {
                 fprintf(stderr, "number of threads must be positive.\n");
+                throw std::exception();
+            }
+
+            if (!(0 < LOW_BASELINE && LOW_BASELINE <= 1) || !(0 < HIGH_BASELINE && HIGH_BASELINE <= 1)) {
+                fprintf(stderr, "Baseline must be in range 0 to 1.\n");
                 throw std::exception();
             }
         }
