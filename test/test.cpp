@@ -48,6 +48,8 @@ int QUEUE_SIZE = -1;
 double LOW_BASELINE;
 double HIGH_BASELINE;
 
+bool INDEX = false;
+
 // test function
 std::string operator*(std::string& s, size_t n) {
     std::string result;
@@ -293,9 +295,10 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
+            gz_index* index = NULL;
             BOOST_CHECK_NO_THROW(process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
                                  extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                 thread_data_list, is_gz));
+                                 thread_data_list, is_gz, &index));
         }
     }
     delete[] thread_data_list;
@@ -339,9 +342,10 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
+            gz_index* index = NULL;
             BOOST_CHECK_NO_THROW(process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
                                               extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                              thread_data_list, is_gz));
+                                              thread_data_list, is_gz, &index));
         }
     }
     delete[] thread_data_list;
@@ -385,9 +389,10 @@ BOOST_AUTO_TEST_CASE(main_test_long_32) {
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
+            gz_index* index = NULL;
             BOOST_CHECK_NO_THROW(process_kmer_long(fastq_path.string().c_str(), repeat_check_table, rot_table,
                                                    extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                                   thread_data_list, is_gz));
+                                                   thread_data_list, is_gz, &index));
         }
     }
     delete[] thread_data_list;
@@ -432,9 +437,10 @@ BOOST_AUTO_TEST_CASE(main_test_long_64) {
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
             NUM_THREAD = num_thread;
+            gz_index* index = NULL;
             BOOST_CHECK_NO_THROW(process_kmer_long(fastq_path.string().c_str(), repeat_check_table, rot_table,
                                                    extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                                   thread_data_list, is_gz));
+                                                   thread_data_list, is_gz, &index));
         }
     }
     delete[] thread_data_list;

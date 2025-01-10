@@ -14,12 +14,14 @@ add_executable(trew
         src/trew.cpp
         src/kmer.cpp
         src/kmer.h
+        src/zran.h
 )
 
 add_executable(trew_test
         test/test.cpp
         src/kmer.cpp
         src/kmer.h
+        src/zran.h
 )
 
 target_link_libraries(trew PRIVATE argparse::argparse TBB::tbb absl::flat_hash_map absl::numeric ZLIB::ZLIB)

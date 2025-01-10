@@ -5,7 +5,12 @@
 #define NOMINMAX
 #endif
 
-#define LENGTH (1 << 22)
+#define LENGTH (1 << 17)
+#define WINSIZE (1U << 15)  // sliding window size
+#define CHUNK (1 << 15)
+
+#define SPAN (1L << 20)       // desired distance between access points
+
 #define MAX_SEQ 1000
 
 #define ABS_MAX_ANS_NUM 10
@@ -42,6 +47,7 @@
 #include <tbb/concurrent_queue.h>
 #include <tbb/tbb.h>
 
+#include "zran.h"
 #include <zlib.h>
 
 extern int MIN_MER;
@@ -52,6 +58,7 @@ extern int SLICE_LENGTH;
 extern int QUEUE_SIZE;
 extern double LOW_BASELINE;
 extern double HIGH_BASELINE;
+extern bool INDEX;
 
 template <typename T>
 struct FinalData {
@@ -60,28 +67,50 @@ struct FinalData {
     T both;
 };
 
+typedef std::pair<int, int> KmerData;
+typedef std::vector<std::pair<int, int>> LocationVector;
 typedef absl::uint128 uint128_t;
+
+struct FastqLocData {
+    std::pair<int64_t, int64_t> pos;
+    KmerData rht_kmer;
+    KmerData lef_kmer;
+    std::pair<uint128_t, uint128_t> rht_seq;
+    std::pair<uint128_t, uint128_t> lef_seq;
+};
+
 typedef std::tuple<uint16_t**, uint64_t**, uint128_t**, uint32_t**> ThreadDataTuple;
 typedef std::pair<int, uint128_t> KmerSeq;
+
+struct KmerAnsData {
+    KmerSeq first;
+    FinalData<int64_t> second;
+    bool dir;
+};
 
 typedef absl::flat_hash_map<KmerSeq, uint32_t> ResultMap;
 typedef std::pair<ResultMap*, ResultMap*> ResultMapPair;
 typedef FinalData<ResultMapPair> ResultMapData;
-
-typedef std::vector<std::pair<int, int>> LocationVector;
+typedef std::pair<ResultMapData, std::vector<FastqLocData>*> ResultMapPairData;
 
 typedef absl::flat_hash_map<uint64_t, uint16_t> CounterMap;
 typedef absl::flat_hash_map<uint128_t, uint16_t> CounterMap_128;
 
 typedef absl::flat_hash_map<KmerSeq, FinalData<int64_t>> FinalFastqData;
-typedef std::vector<std::pair<KmerSeq, FinalData<int64_t>>> FinalFastqVector;
+typedef std::vector<KmerAnsData> FinalFastqVector;
+typedef std::vector<std::pair<KmerSeq, FinalData<int64_t>>> LeagcyFinalFastqVector;
 typedef std::pair<FinalFastqVector*, FinalFastqVector*> FinalFastqVectorPair;
-
-typedef std::pair<int, int> KmerData;
 
 struct QueueData {
     char* buffer;
     LocationVector* loc_vector;
+    int64_t buf_off;
+};
+
+struct FinalFastqOutput {
+    FinalFastqVector* high;
+    FinalFastqVector* low;
+    std::vector<FastqLocData>* k_mer_loc_vector;
 };
 
 typedef tbb::concurrent_bounded_queue<QueueData> TBBQueue;
@@ -127,45 +156,39 @@ public:
     }
 };
 
-ResultMapData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
+ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
 
-ResultMapData read_fastq(FILE* fp, ThreadData* thread_data, uint32_t** rot_table, uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
 void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue);
+void read_fastq_gz_thread(FILE* fp, gz_index **built, TBBQueue* buffer_task_queue);
 
-ResultMapData read_fastq_gz(gzFile fp, ThreadData* thread_data, uint32_t** rot_table, uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
-void read_fastq_gz_thread(gzFile fp, TBBQueue* buffer_task_queue);
+ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
 
-ResultMapData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
-
-ResultMapData read_fastq_long(FILE* fp, ThreadData* thread_data, uint32_t** rot_table, uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
 void read_fastq_thread_long(FILE* fp, TBBQueue* buffer_task_queue);
-
-ResultMapData read_fastq_gz_long(gzFile fp, ThreadData* thread_data, uint32_t** rot_table, uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
-void read_fastq_gz_thread_long(gzFile fp, TBBQueue* buffer_task_queue);
+void read_fastq_gz_thread_long(FILE* fp, gz_index **built, TBBQueue* buffer_task_queue);
 
 void int_to_four(char* buffer, uint128_t seq, int n);
 
-FinalFastqVectorPair process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
+FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                   uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                                  ThreadData* thread_data_list, bool is_gz);
+                                  ThreadData* thread_data_list, bool is_gz, gz_index **built);
 
-FinalFastqVectorPair process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
+FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                     uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                                    ThreadData* thread_data_list, bool is_gz);
+                                    ThreadData* thread_data_list, bool is_gz, gz_index **built);
 
-FinalFastqVectorPair process_output(const char* file_name, ResultMapData* result_list, uint32_t **rot_table, uint128_t *extract_k_mer_ans);
+FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result_list, uint32_t **rot_table, uint128_t *extract_k_mer_ans);
 
 KmerData k_mer_check(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t *extract_k_mer,
                      uint16_t** k_mer_counter, CounterMap* k_mer_counter_map,
                      uint64_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
                      ResultMapPair result_pair,
-                     int16_t* k_mer_total_cnt, int min_mer, int max_mer);
+                     int16_t* k_mer_total_cnt, int min_mer, int max_mer, std::pair<uint64_t, uint64_t>* repeat_seq = nullptr);
 
 KmerData k_mer_check_128(const char* seq, int st, int nd, uint32_t** rot_table, const uint128_t *extract_k_mer,
                          uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
                          uint128_t** k_mer_data, uint32_t** k_mer_counter_list, uint8_t** repeat_check_table,
                          ResultMapPair result_pair,
-                         int16_t* k_mer_total_cnt, int min_mer, int max_mer);
+                         int16_t* k_mer_total_cnt, int min_mer, int max_mer,  std::pair<uint128_t, uint128_t>* repeat_seq = nullptr);
 
 void k_mer_target(const char* seq, int st, int nd, uint32_t** rot_table, const uint64_t *extract_k_mer,
                   uint16_t** k_mer_counter, CounterMap* k_mer_counter_map,
@@ -196,7 +219,18 @@ uint128_t reverse_complement_128(uint128_t x);
 
 FinalData<int64_t> add_data(FinalData<int64_t> a, FinalData<int64_t> b);
 
-void final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low);
+std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low);
 ResultMap* get_score_map(FinalFastqData* total_result);
 
+ptrdiff_t deflate_index_extract(FILE *in, gz_index *index,
+                                off_t offset, unsigned char *buf, size_t len);
+
+ptrdiff_t file_extract(FILE *in, off_t offset, unsigned char *buf, size_t len);
+
+void deflate_index_free(gz_index *index);
+
+void get_trm_read(const std::filesystem::path &fastq_path, std::vector<std::pair<KmerSeq, int>>* put_trm,
+                   FinalFastqOutput fastq_file_data, gz_index* index, size_t st, size_t nd, char* temp_path);
+
+gz_index *get_thread_safe_index(gz_index* index);
 #endif //TROW_KMER_H
