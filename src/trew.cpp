@@ -6,6 +6,10 @@
 #include <fstream>
 #include <iostream>
 
+#ifdef _WIN32
+#include <io.h>
+#endif
+
 int MAX_MER;
 int MIN_MER;
 int TABLE_MAX_MER;
@@ -392,17 +396,19 @@ int main(int argc, char** argv) {
             size_t data_size = fastq_file_data_vector[i].k_mer_loc_vector -> size();
             size_t chunk_size = data_size / NUM_THREAD;
 
-            std::vector<char*> tempFilePaths;
+            std::vector<char*> temp_file_list;
 
             for (size_t j = 0; j < NUM_THREAD; ++j) {
-                std::string template_loc = std::filesystem::temp_directory_path() / "tmp_trew_XXXXXX";
-                char* template_loc_buf = new char[template_loc.size() + 1];
-                std::strcpy(template_loc_buf, template_loc.c_str());
-
-                int fd = mkstemp(template_loc_buf);
-                close(fd);
-
-                tempFilePaths.emplace_back(template_loc_buf);
+				std::string template_loc = (std::filesystem::temp_directory_path() / "tmp_trew_XXXXXX").string();
+				char* template_loc_buf = new char[template_loc.size() + 1];
+				std::strcpy(template_loc_buf, template_loc.c_str());
+#ifdef _WIN32
+			  	template_loc_buf = _mktemp(template_loc_buf);
+#else
+				int fd = mkstemp(template_loc_buf);
+				close(fd);
+#endif
+				temp_file_list.emplace_back(template_loc_buf);
             }
 
             tbb::task_arena arena(NUM_THREAD);
@@ -411,11 +417,11 @@ int main(int argc, char** argv) {
                     size_t st = thread_idx * chunk_size;
                     size_t nd = (thread_idx == NUM_THREAD -1) ? data_size : st + chunk_size;
                     get_trm_read(fastq_path_list[i], put_trm, fastq_file_data_vector[i],
-                                                      get_thread_safe_index(gz_index_vector[i]), st, nd, tempFilePaths[thread_idx]);
+								 get_thread_safe_index(gz_index_vector[i]), st, nd, temp_file_list[thread_idx]);
                 });
             });
 
-            temp_file_loc_vector.push_back(tempFilePaths);
+            temp_file_loc_vector.push_back(temp_file_list);
         }
 
         auto trm_out_loc = fastq_path_list[0].string() + ".trm_read.fa";

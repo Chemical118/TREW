@@ -89,7 +89,11 @@ ptrdiff_t deflate_index_extract(FILE *in, gz_index *index,
     point += lo;
 
     // Initialize the input file and prime the inflate engine to start there.
-    int ret = fseeko(in, point->in - (point->bits ? 1 : 0), SEEK_SET);
+#ifdef _WIN32
+  	int ret = _fseeki64(in, point->in - (point->bits ? 1 : 0), SEEK_SET);
+#else
+  	int ret = fseeko(in, point->in - (point->bits ? 1 : 0), SEEK_SET);
+#endif
     if (ret == -1)
         return Z_ERRNO;
     int ch = 0;
