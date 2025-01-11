@@ -43,6 +43,7 @@
 #include <tuple>
 #include <cstdint>
 #include <cinttypes>
+#include <utility>
 
 #include <tbb/concurrent_queue.h>
 #include <tbb/tbb.h>
@@ -77,6 +78,17 @@ struct FastqLocData {
     KmerData lef_kmer;
     std::pair<uint128_t, uint128_t> rht_seq;
     std::pair<uint128_t, uint128_t> lef_seq;
+
+    FastqLocData(const std::pair<int64_t, int64_t>& pos_,
+                 KmerData  rht_kmer_,
+                 KmerData  lef_kmer_,
+                 const std::pair<uint128_t, uint128_t>& rht_seq_,
+                 const std::pair<uint128_t, uint128_t>& lef_seq_)
+            : pos(pos_),
+              rht_kmer(std::move(rht_kmer_)),
+              lef_kmer(std::move(lef_kmer_)),
+              rht_seq(rht_seq_),
+              lef_seq(lef_seq_) {}
 };
 
 typedef std::tuple<uint16_t**, uint64_t**, uint128_t**, uint32_t**> ThreadDataTuple;
@@ -86,6 +98,13 @@ struct KmerAnsData {
     KmerSeq first;
     FinalData<int64_t> second;
     bool dir;
+
+    KmerAnsData(KmerSeq  first_,
+                const FinalData<int64_t>& second_,
+                bool dir_)
+            : first(std::move(first_)),
+              second(second_),
+              dir(dir_) {}
 };
 
 typedef absl::flat_hash_map<KmerSeq, uint32_t> ResultMap;

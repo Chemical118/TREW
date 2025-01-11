@@ -2673,7 +2673,7 @@ std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total
 
 ResultMap* get_score_map(FinalFastqData* total_result) {
     int cnt;
-    FinalFastqVector total_result_vector {};
+    LeagcyFinalFastqVector total_result_vector {};
     for (auto& [k, v] : *total_result) {
         if (v.forward + v.backward + v.both >= ABS_MIN_PRINT_COUNT) {
             total_result_vector.emplace_back(k ,v);
@@ -2688,7 +2688,7 @@ ResultMap* get_score_map(FinalFastqData* total_result) {
     });
 
     cnt = 0;
-    for (auto& [k, v, _] : total_result_vector) {
+    for (auto& [k, v] : total_result_vector) {
         if (v.forward == 0 || cnt >= NUM_RAT_CAND) {
             break;
         }
@@ -2710,7 +2710,7 @@ ResultMap* get_score_map(FinalFastqData* total_result) {
     });
 
     cnt = 0;
-    for (auto& [k, v, _] : total_result_vector) {
+    for (auto& [k, v] : total_result_vector) {
         if (cnt >= NUM_RAT_CAND) {
             break;
         }
