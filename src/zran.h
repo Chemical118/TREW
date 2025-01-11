@@ -3,10 +3,9 @@
  * For conditions of distribution and use, see copyright notice in zlib.h
  * Version 1.5  4 Feb 2024  Mark Adler */
 
-#include <stdio.h>
 #include <zlib.h>
 
-#define RAW -15
+#define RAW (-15)
 #define ZLIB 15
 #define GZIP 31
 
