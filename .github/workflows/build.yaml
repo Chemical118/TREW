@@ -100,7 +100,7 @@ jobs:
         shell: bash
 
       - name: Upload TREW to Github artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: trew-${{ matrix.BINARY_OUTPUT_POSTFIX }}
           path: ./trew-${{ matrix.BINARY_OUTPUT_POSTFIX }}
