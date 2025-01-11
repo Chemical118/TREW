@@ -1444,14 +1444,20 @@ FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_tabl
         buffer_task_queue.push(QueueData{nullptr, nullptr});
 
         int i = NUM_THREAD - 1;
-        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+        if (NUM_THREAD > 1) {
+            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+                result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+            });
+        } else {
             result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
-        });
+        }
     } else {
         result_list[NUM_THREAD - 1] = ResultMapPairData {{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}}, new std::vector<FastqLocData> {}};
     }
 
-    tasks.wait();
+    if (NUM_THREAD > 1) {
+        tasks.wait();
+    }
 
     return process_output(file_name, result_list, rot_table, extract_k_mer_ans);
 }
@@ -1502,14 +1508,20 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
         buffer_task_queue.push(QueueData{nullptr, nullptr});
 
         int i = NUM_THREAD - 1;
-        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+        if (NUM_THREAD > 1) {
+            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+                result_list[i] = buffer_task_long(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+            });
+        } else {
             result_list[i] = buffer_task_long(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
-        });
+        }
     } else {
         result_list[NUM_THREAD - 1] = ResultMapPairData {{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}}, new std::vector<FastqLocData> {}};
     }
 
-    tasks.wait();
+    if (NUM_THREAD > 1) {
+        tasks.wait();
+    }
 
     return process_output(file_name, result_list, rot_table, extract_k_mer_ans);
 }
