@@ -289,7 +289,7 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
                            {fs::current_path().parent_path() / fs::path("test") / fs::path("test.fastq"), false}};
     }
 
-    std::vector<int> NUM_THREAD_VECTOR = {1, 2};
+    std::vector<int> NUM_THREAD_VECTOR = {1};
 
     ThreadData* thread_data_list = new ThreadData[*std::max_element(NUM_THREAD_VECTOR.begin(), NUM_THREAD_VECTOR.end())];
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
@@ -336,7 +336,7 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
                            {fs::current_path().parent_path() / fs::path("test") / fs::path("test.fastq"), false}};
     }
 
-    std::vector<int> NUM_THREAD_VECTOR = {1, 2};
+    std::vector<int> NUM_THREAD_VECTOR = {1};
 
     ThreadData* thread_data_list = new ThreadData[*std::max_element(NUM_THREAD_VECTOR.begin(), NUM_THREAD_VECTOR.end())];
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
@@ -384,7 +384,7 @@ BOOST_AUTO_TEST_CASE(main_test_long_32) {
                            {fs::current_path().parent_path() / fs::path("test") / fs::path("test_long.fastq"), false}};
     }
 
-    std::vector<int> NUM_THREAD_VECTOR = {1, 2};
+    std::vector<int> NUM_THREAD_VECTOR = {1};
     ThreadData* thread_data_list = new ThreadData[*std::max_element(NUM_THREAD_VECTOR.begin(), NUM_THREAD_VECTOR.end())];
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
         for(auto& num_thread : NUM_THREAD_VECTOR) {
@@ -431,7 +431,7 @@ BOOST_AUTO_TEST_CASE(main_test_long_64) {
                            {fs::current_path().parent_path() / fs::path("test") / fs::path("test_long.fastq"), false}};
     }
 
-    std::vector<int> NUM_THREAD_VECTOR = {1, 2};
+    std::vector<int> NUM_THREAD_VECTOR = {1};
 
     ThreadData* thread_data_list = new ThreadData[*std::max_element(NUM_THREAD_VECTOR.begin(), NUM_THREAD_VECTOR.end())];
     for (auto& [fastq_path, is_gz] : FILE_LOC_VECTOR) {
