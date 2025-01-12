@@ -351,7 +351,8 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
 
                         if (left_temp_k_mer.first > 0 || left_temp_k_mer.second > 0) {
                             right_temp_k_mer = k_mer_check(temp_task.buffer, nd - ((n + 1) / 2) + 1, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {left_temp_k_mer.first > 0 ? nullptr : temp_result_right.first, left_temp_k_mer.second > 0 ? nullptr : temp_result_right.second}, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER));
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {left_temp_k_mer.first > 0 ? nullptr : temp_result_right.first, left_temp_k_mer.second > 0 ? nullptr : temp_result_right.second},
+                                                           k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
 
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
                                 k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
@@ -431,7 +432,8 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
 
                         if (left_temp_k_mer.first > 0 || left_temp_k_mer.second > 0) {
                             right_temp_k_mer = k_mer_check_128(temp_task.buffer, nd - ((n + 1) / 2) + 1, nd, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
-                                                               k_mer_data_128, k_mer_counter_list, repeat_check_table, ResultMapPair {left_temp_k_mer.first > 0 ? nullptr : temp_result_right.first, left_temp_k_mer.second > 0 ? nullptr : temp_result_right.second}, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
+                                                               k_mer_data_128, k_mer_counter_list, repeat_check_table, ResultMapPair {left_temp_k_mer.first > 0 ? nullptr : temp_result_right.first, left_temp_k_mer.second > 0 ? nullptr : temp_result_right.second},
+                                                               k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
 
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
                                 k_mer_target_128(temp_task.buffer, st, nd, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
