@@ -160,8 +160,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    bool IS_PAIRED_END;
-    std::vector<int> paired_end_vector {};
     std::vector<std::filesystem::path> fastq_path_list {};
     if (program.is_subcommand_used("long")) {
         try {
@@ -246,7 +244,6 @@ int main(int argc, char** argv) {
         }
     } else if (program.is_subcommand_used("short")) {
         try {
-            IS_PAIRED_END = short_command.get<bool>("--paired_end");
             MIN_MER = short_command.get<int>("MIN_MER");
             MAX_MER = short_command.get<int>("MAX_MER");
             NUM_THREAD = short_command.get<int>("--thread");
@@ -306,70 +303,14 @@ int main(int argc, char** argv) {
                 throw std::exception();
             }
 
-            if (IS_PAIRED_END) {
-                // Ensure SHORT_FASTQ_LOC has zero arguments
-                std::vector<std::string> short_fastq_loc = short_command.get<std::vector<std::string>>("SHORT_FASTQ");
-                if (!short_fastq_loc.empty()) {
-                    std::cerr << "SHORT_FASTQ_LOC must not be provided when --IS_PAIRED_END is used.\n";
-                    throw std::exception();
+            std::vector<std::string> fastq_loc_list = long_command.get<std::vector<std::string>>("LONG_FASTQ_LOC");
+            for (const auto& fastq_loc : fastq_loc_list) {
+                std::filesystem::path fastq_path {fastq_loc};
+                if (! std::filesystem::is_regular_file(fastq_loc)) {
+                    fprintf(stderr, "%s : file not found\n", fastq_loc.c_str());
+                    return 1;
                 }
-
-                // Ensure --fq1 and --fq2 are used
-                if (!short_command.is_used("--fq1") || !short_command.is_used("--fq2")) {
-                    std::cerr << "--fq1 and --fq2 are required in paired-end mode.\n";
-                    throw std::exception();
-                }
-
-                // Retrieve fq1 and fq2 lists
-                std::vector<std::string> fq1_loc_list = short_command.get<std::vector<std::string>>("--fq1");
-                std::vector<std::string> fq2_loc_list = short_command.get<std::vector<std::string>>("--fq2");
-
-                // Check if the number of fq1 and fq2 files match
-                if (fq1_loc_list.size() != fq2_loc_list.size()) {
-                    std::cerr << "--fq1 and --fq2 must have the same number of files.\n";
-                    throw std::exception();
-                }
-
-                // Check if all fq1 and fq2 files exist
-                for (const auto& fastq_loc : fq1_loc_list) {
-                    if (!std::filesystem::is_regular_file(fastq_loc)) {
-                        std::cerr << fastq_loc << " : file not found\n";
-                        throw std::exception();
-                    }
-                    fastq_path_list.emplace_back(fastq_loc);
-                    paired_end_vector.push_back(FOR_READ);
-                }
-
-                for (const auto& fastq_loc : fq2_loc_list) {
-                    if (!std::filesystem::is_regular_file(fastq_loc)) {
-                        std::cerr << fastq_loc << " : file not found\n";
-                        throw std::exception();
-                    }
-                    fastq_path_list.emplace_back(fastq_loc);
-                    paired_end_vector.push_back(REV_READ);
-                }
-            } else {
-                // Single-end mode, ensure SHORT_FASTQ_LOC has at least one argument
-                std::vector<std::string> fastq_loc_list = short_command.get<std::vector<std::string>>("SHORT_FASTQ");
-                if (fastq_loc_list.empty()) {
-                    std::cerr << "SHORT_FASTQ_LOC is required in single-end mode.\n";
-                    throw std::exception();
-                }
-
-                // Ensure --fq1 and --fq2 are not used
-                if (short_command.is_used("--fq1") || short_command.is_used("--fq2")) {
-                    std::cerr << "--fq1 and --fq2 should not be used in single-end mode.\n";
-                    throw std::exception();
-                }
-
-                // Check if all SHORT_FASTQ_LOC files exist
-                for (const auto& fastq_loc : fastq_loc_list) {
-                    if (!std::filesystem::is_regular_file(fastq_loc)) {
-                        std::cerr << fastq_loc << " : file not found\n";
-                        throw std::exception();
-                    }
-                    fastq_path_list.emplace_back(fastq_loc);
-                }
+                fastq_path_list.push_back(fastq_path);
             }
         }
         catch (...) {
@@ -416,9 +357,7 @@ int main(int argc, char** argv) {
     bool IS_SHORT = program.is_subcommand_used("short");
 
     FinalFastqOutput fastq_output;
-    for (size_t i = 0; i < fastq_path_list.size(); ++i) {
-        const auto& fastq_path = fastq_path_list[i];
-
+    for (const auto& fastq_path : fastq_path_list) {
         bool is_gz = false;
         std::string fastq_ext = fastq_path.extension().string();
         for (const auto& ext : gz_extension_list) {
@@ -430,15 +369,9 @@ int main(int argc, char** argv) {
 
         gz_index* index = NULL;
         if (IS_SHORT) {
-            if (IS_PAIRED_END) {
-                fastq_output = process_kmer(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
-                                            extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                            thread_data_list, is_gz, &index, paired_end_vector[i]);
-            } else {
-                fastq_output = process_kmer(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
-                                            extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                            thread_data_list, is_gz, &index, SIN_READ);
-            }
+            fastq_output = process_kmer(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
+                                             extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
+                                             thread_data_list, is_gz, &index);
         } else {
             fastq_output = process_kmer_long(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
                                               extract_k_mer, extract_k_mer_128, extract_k_mer_ans,

@@ -34,10 +34,6 @@
 #define K_MER_DATA_MAX 1
 #define K_MER_DATA_MAX_SEQ 2
 
-#define SIN_READ 0
-#define FOR_READ 1
-#define REV_READ 2
-
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -179,7 +175,7 @@ public:
     }
 };
 
-ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table, int read_type);
+ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table);
 
 void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue);
 void read_fastq_gz_thread(FILE* fp, gz_index **built, TBBQueue* buffer_task_queue);
@@ -193,7 +189,7 @@ void int_to_four(char* buffer, uint128_t seq, int n);
 
 FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                   uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                                  ThreadData* thread_data_list, bool is_gz, gz_index **built, const int read_type);
+                                  ThreadData* thread_data_list, bool is_gz, gz_index **built);
 
 FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                     uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
