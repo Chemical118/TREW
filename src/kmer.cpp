@@ -357,11 +357,11 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
                                 k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {result.both.first, nullptr}, k_mer_total_cnt, left_temp_k_mer.first);
-                            } else if (left_temp_k_mer.first > 0 && right_temp_k_mer.first == 0) {
+                            } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                     (*(result.forward.first))[seq] += cnt;
                                 }
-                            } else if (left_temp_k_mer.first == 0 && right_temp_k_mer.first > 0) {
+
                                 for (auto& [seq, cnt] : *(temp_result_right.first)) {
                                     (*(result.backward.first))[seq] += cnt;
                                 }
@@ -370,11 +370,11 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             if ((left_temp_k_mer.second == right_temp_k_mer.second) && (left_temp_k_mer.second > 0)) {
                                 k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {nullptr, result.both.second}, k_mer_total_cnt, left_temp_k_mer.second);
-                            } else if (left_temp_k_mer.second > 0 && right_temp_k_mer.second == 0) {
+                            } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                     (*(result.forward.second))[seq] += cnt;
                                 }
-                            } else if (left_temp_k_mer.second == 0 && right_temp_k_mer.second > 0) {
+
                                 for (auto& [seq, cnt] : *(temp_result_right.second)) {
                                     (*(result.backward.second))[seq] += cnt;
                                 }
@@ -391,8 +391,8 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                         temp_result_left.second -> clear();
                     }
 
-                    high_half_check = (left_temp_k_mer.first == 0 && right_temp_k_mer.first == 0) || (left_temp_k_mer.first > 0 && right_temp_k_mer.first > 0 && left_temp_k_mer.first != right_temp_k_mer.first);
-                    low_half_check = (left_temp_k_mer.second == 0 && right_temp_k_mer.second == 0) || (left_temp_k_mer.second > 0 && right_temp_k_mer.second > 0 && left_temp_k_mer.second != right_temp_k_mer.second);
+                    high_half_check = left_temp_k_mer.first == 0 && right_temp_k_mer.first == 0;
+                    low_half_check = left_temp_k_mer.second == 0 && right_temp_k_mer.second == 0;
 
                     if (4 * MAX_MER > n && (high_half_check || low_half_check)) {
                         k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
@@ -438,11 +438,11 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
                                 k_mer_target_128(temp_task.buffer, st, nd, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
                                                  k_mer_data_128, k_mer_counter_list, repeat_check_table, {result.both.first, nullptr}, k_mer_total_cnt, left_temp_k_mer.first);
-                            } else if (left_temp_k_mer.first > 0 && right_temp_k_mer.first == 0) {
+                            } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                     (*(result.forward.first))[seq] += cnt;
                                 }
-                            } else if (left_temp_k_mer.first == 0 && right_temp_k_mer.first > 0) {
+
                                 for (auto& [seq, cnt] : *(temp_result_right.first)) {
                                     (*(result.backward.first))[seq] += cnt;
                                 }
@@ -451,11 +451,11 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             if ((left_temp_k_mer.second == right_temp_k_mer.second) && (left_temp_k_mer.second > 0)) {
                                 k_mer_target_128(temp_task.buffer, st, nd, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
                                                  k_mer_data_128, k_mer_counter_list, repeat_check_table, {nullptr, result.both.second}, k_mer_total_cnt, left_temp_k_mer.second);
-                            } else if (left_temp_k_mer.second > 0 && right_temp_k_mer.second == 0) {
+                            } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                     (*(result.forward.second))[seq] += cnt;
                                 }
-                            } else if (left_temp_k_mer.second == 0 && right_temp_k_mer.second > 0) {
+
                                 for (auto& [seq, cnt] : *(temp_result_right.second)) {
                                     (*(result.backward.second))[seq] += cnt;
                                 }
@@ -472,8 +472,8 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                         temp_result_left.second -> clear();
                     }
 
-                    high_half_check = (left_temp_k_mer.first == 0 && right_temp_k_mer.first == 0) || (left_temp_k_mer.first > 0 && right_temp_k_mer.first > 0 && left_temp_k_mer.first != right_temp_k_mer.first);
-                    low_half_check = (left_temp_k_mer.second == 0 && right_temp_k_mer.second == 0) || (left_temp_k_mer.second > 0 && right_temp_k_mer.second > 0 && left_temp_k_mer.second != right_temp_k_mer.second);
+                    high_half_check = left_temp_k_mer.first == 0 && right_temp_k_mer.first == 0;
+                    low_half_check = left_temp_k_mer.second == 0 && right_temp_k_mer.second == 0;
 
                     if (4 * MAX_MER > n && (high_half_check || low_half_check)) {
                         k_mer_check_128(temp_task.buffer, st, nd, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
@@ -1656,14 +1656,7 @@ FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result
     FinalFastqVector* final_result_low_vector = new FinalFastqVector {};
     for (auto& [k, v] : final_result_low) {
         if (check_ans_seq(k, extract_k_mer_ans, rot_table)) {
-            bool dir = true;
-            if (v.backward > v.forward) {
-                dir = false;
-                _tcnt = v.forward;
-                v.forward = v.backward;
-                v.backward = _tcnt;
-            }
-            final_result_low_vector -> emplace_back(k, v, dir);
+            final_result_low_vector -> emplace_back(k, v);
         }
     }
 
@@ -1678,14 +1671,7 @@ FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result
     FinalFastqVector* final_result_high_vector = new FinalFastqVector {};
     for (auto& [k, v] : final_result_high) {
         if (check_ans_seq(k, extract_k_mer_ans, rot_table)) {
-            bool dir = true;
-            if (v.backward > v.forward) {
-                dir = false;
-                _tcnt = v.forward;
-                v.forward = v.backward;
-                v.backward = _tcnt;
-            }
-            final_result_high_vector -> emplace_back(k, v, dir);
+            final_result_high_vector -> emplace_back(k, v);
         }
     }
 
@@ -1698,18 +1684,20 @@ FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result
     });
 
     fprintf(stdout, ">H:%s\n", file_name);
-    for (auto& [k, v, b] : *final_result_high_vector) {
+    for (auto& [k, v] : *final_result_high_vector) {
         if (v.forward + v.backward + v.both >= ABS_MIN_PRINT_COUNT) {
             int_to_four(buffer, k.second, k.first);
-            fprintf(stdout, "%d,%s,%" PRId64",%" PRId64",%" PRId64",%c\n", k.first, buffer, v.forward, v.backward, v.both, b ? '+' :'-');
+            fprintf(stdout, "%d,%s,%" PRId64",%" PRId64",%" PRId64",%c\n", k.first, buffer, MAX(v.forward, v.backward), MIN(v.forward, v.backward), v.both,
+                    v.forward > v.backward ? '+' : (v.forward < v.backward ? '-' : '?'));
         }
     }
 
     fprintf(stdout, ">L:%s\n", file_name);
-    for (auto& [k, v, b] : *final_result_low_vector) {
+    for (auto& [k, v] : *final_result_low_vector) {
         if (v.forward + v.backward + v.both >= ABS_MIN_PRINT_COUNT) {
             int_to_four(buffer, k.second, k.first);
-            fprintf(stdout, "%d,%s,%" PRId64",%" PRId64",%" PRId64",%c\n", k.first, buffer, v.forward, v.backward, v.both, b ? '+' :'-');
+            fprintf(stdout, "%d,%s,%" PRId64",%" PRId64",%" PRId64",%c\n", k.first, buffer, MAX(v.forward, v.backward), MIN(v.forward, v.backward), v.both,
+                    v.forward > v.backward ? '+' : (v.forward < v.backward ? '-' : '?'));
         }
     }
 
@@ -2643,10 +2631,16 @@ bool check_ans_seq(const KmerSeq& seq, uint128_t* extract_k_mer_ans, uint32_t** 
     return true;
 }
 
-std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low) {
-    auto final_output = new std::vector<std::pair<KmerSeq, int>> {};
+TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low) {
+    const auto final_output = new TRMDirVector {};
 
     bool max_cnt_check = false;
+    for (auto& [k, v] : *total_result_high) {
+        if (v.forward + v.backward + v.both >= ABS_MIN_ANS_COUNT) {
+            max_cnt_check = true;
+            break;
+        }
+    }
     for (auto& [k, v] : *total_result_low) {
         if (v.forward + v.backward + v.both >= ABS_MIN_ANS_COUNT) {
             max_cnt_check = true;
@@ -2664,11 +2658,71 @@ std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total
         }
         delete score_result_map_high;
 
+        // Bonus point
         int dna_cnt;
         std::vector<std::pair<KmerSeq, std::pair<uint32_t, int>>> score_result_vector {};
         for (auto&[k, v] : *(score_result_map)) {
+            auto low_result = (*total_result_low)[k];
+            auto high_result = (*total_result_high)[k];
+
+            int bonus = 0;
+            int high_dir, low_dir;
+
+            if (high_result.forward > high_result.backward) {
+                high_dir = 1;
+            } else if (high_result.forward < high_result.backward) {
+                high_dir = -1;
+            } else {
+                high_dir = 0;
+            }
+
+            if (low_result.forward > low_result.backward) {
+                low_dir = 1;
+            } else if (low_result.forward < low_result.backward) {
+                low_dir = -1;
+            } else {
+                low_dir = 0;
+            }
+
+            int final_dir;
+            if (low_dir != 0 and (low_dir == high_dir)) {
+                bonus += 1;
+                final_dir = low_dir;
+            } else if (low_dir == 0 and high_dir != 0) {
+                final_dir = high_dir;
+            } else if (low_dir != 0 and high_dir == 0) {
+                final_dir = low_dir;
+            } else if (low_dir != high_dir and (low_result.forward > 0 or low_result.backward > 0 or high_result.forward > 0 or high_result.backward > 0)) {
+                if (low_result.forward < low_result.backward) {
+                    std::swap(low_result.forward, low_result.backward);
+                }
+
+                if (high_result.forward < high_result.backward) {
+                    std::swap(high_result.forward, high_result.backward);
+                }
+
+                if (low_result.backward * high_result.forward == high_result.backward * low_result.forward) {
+                    if (low_result.forward + low_result.backward > high_result.forward + high_result.backward) {
+                        final_dir = low_dir;
+                    } else {
+                        final_dir = high_dir;
+                    }
+                } else if (low_result.backward * high_result.forward < high_result.backward * low_result.forward) {
+                    final_dir = low_dir;
+                } else {
+                    final_dir = high_dir;
+                }
+            } else {
+                final_dir = 0;
+            }
+
             dna_cnt = get_dna_count(k.second, k.first);
-            score_result_vector.push_back({k, {v + (dna_cnt > 2 ? 1 : 0), dna_cnt}});
+            if (dna_cnt > 2) {
+                bonus += 1;
+            }
+
+            final_output -> emplace_back(k, final_dir);
+            score_result_vector.push_back({k, {v + bonus, dna_cnt}});
         }
 
         std::sort(score_result_vector.begin(), score_result_vector.end(), [](auto &a, auto &b) {
@@ -2683,9 +2737,11 @@ std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total
 
         char buffer[ABS_MAX_MER + 1];
         for (int i = 0; i < MIN(ABS_MAX_ANS_NUM, score_result_vector.size()); i++) {
-            final_output -> emplace_back(score_result_vector[i].first, score_result_vector[i].second.first);
             int_to_four(buffer, score_result_vector[i].first.second, score_result_vector[i].first.first);
-            fprintf(stdout, "%s,%" PRIu32"\n", buffer, score_result_vector[i].second.first);
+
+            char sign = ((*final_output)[i].second == 1) ? '+' :
+                        ((*final_output)[i].second == -1) ? '-' : '?';
+            fprintf(stdout, "%s,%" PRIu32",%c\n", buffer, score_result_vector[i].second.first, sign);
         }
         delete score_result_map;
     } else {
@@ -2700,10 +2756,15 @@ std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total
 
 ResultMap* get_score_map(FinalFastqData* total_result) {
     int cnt;
-    LeagcyFinalFastqVector total_result_vector {};
+    FinalFastqVector total_result_vector {};
+
     for (auto& [k, v] : *total_result) {
         if (v.forward + v.backward + v.both >= ABS_MIN_PRINT_COUNT) {
-            total_result_vector.emplace_back(k ,v);
+            if (v.backward > v.forward) {
+                total_result_vector.emplace_back(k , FinalData<int64_t>{v.backward, v.forward, v.both});
+            } else {
+                total_result_vector.emplace_back(k ,v);
+            }
         }
     }
 
@@ -2751,7 +2812,7 @@ ResultMap* get_score_map(FinalFastqData* total_result) {
         (*score_result_map)[total_result_vector[i].first] += 1;
     }
 
-    LeagcyFinalFastqVector ratio_result_vector(ratio_result.begin(), ratio_result.end());
+    FinalFastqVector ratio_result_vector(ratio_result.begin(), ratio_result.end());
     std::sort(ratio_result_vector.begin(), ratio_result_vector.end(), [](auto &a, auto &b) {
         return (double) a.second.backward / a.second.forward < (double) b.second.backward / b.second.forward;
     });
@@ -2763,22 +2824,11 @@ ResultMap* get_score_map(FinalFastqData* total_result) {
     return score_result_map;
 }
 
-void get_trm_read(const std::filesystem::path &fastq_path, std::vector<std::pair<KmerSeq, int>>* put_trm, FinalFastqOutput fastq_file_data, gz_index* index,
+void get_trm_read(const std::filesystem::path &fastq_path, TRMDirVector* put_trm, FinalFastqOutput fastq_file_data, gz_index* index,
                    size_t st, size_t nd, char* temp_path) {
-    absl::flat_hash_map<KmerSeq, std::pair<int, int>> trm_dir;
-    for (auto &[k ,_, b] : *fastq_file_data.high) {
-        for (auto &[trm, _] : *put_trm) {
-            if (k == trm) {
-                trm_dir[trm].first = b ? 1 : 0;
-            }
-        }
-    }
-    for (auto &[k ,_, b] : *fastq_file_data.low) {
-        for (auto &[trm, _] : *put_trm) {
-            if (k == trm) {
-                trm_dir[trm].second = b ? 1 : 0;
-            }
-        }
+    TRMDirMap trm_dir = {};
+    for (auto&[k, a] : *put_trm) {
+        trm_dir[k] = a;
     }
 
     FILE *in = fopen(std::filesystem::canonical(fastq_path).string().c_str(), "rb");
@@ -2797,43 +2847,55 @@ void get_trm_read(const std::filesystem::path &fastq_path, std::vector<std::pair
 
         std::vector<std::pair<std::pair<bool, bool>, KmerSeq>> seq_vector = {};
 
-        if (rht.first != 0) {
-            seq_vector.push_back({{false, true}, {rht.first, rht_seq.first}});
-        }
-        if (lef.first != 0) {
-            seq_vector.push_back({{true, true}, {lef.first, lef_seq.first}});
-        }
-        if (rht.second != 0) {
-            seq_vector.push_back({{false, false}, {rht.second, rht_seq.second}});
-        }
-        if (lef.second != 0) {
-            seq_vector.push_back({{true, false}, {lef.second, lef_seq.second}});
+        if (rht.first != rht.second) {
+            if (rht.first != 0) {
+                seq_vector.push_back({{false, true}, {rht.first, rht_seq.first}});
+            }
+            if (rht.second != 0) {
+                seq_vector.push_back({{false, false}, {rht.second, rht_seq.second}});
+            }
         }
 
-        bool seq_dir, aln_dir, loc_dir, is_high;
+        if (lef.first != lef.second) {
+            if (lef.first != 0) {
+                seq_vector.push_back({{true, true}, {lef.first, lef_seq.first}});
+            }
+            if (lef.second != 0) {
+                seq_vector.push_back({{true, false}, {lef.second, lef_seq.second}});
+            }
+        }
+
         uint128_t _t;
+        absl::flat_hash_set<KmerSeq> output_set {};
+        bool seq_dir, aln_dir, loc_dir, is_high;
 
         for (auto &[data, seq] : seq_vector) {
             _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
-            if (trm_dir.contains(KmerSeq {seq.first, MIN(_t, seq.second)})) {
+            KmerSeq kseq = KmerSeq {seq.first, MIN(_t, seq.second)};
+            if (trm_dir.contains(KmerSeq {seq.first, MIN(_t, seq.second)}) and (not output_set.contains(kseq))) {
                 loc_dir = data.first;
                 is_high = data.second;
 
                 seq_dir = MIN(_t, seq.second) == seq.second;
-                aln_dir = is_high ? trm_dir[seq].first : trm_dir[seq].second;
 
-                char buffer[ABS_MAX_MER + 1];
-                int_to_four(buffer, MIN(_t, seq.second), seq.first);
-                fprintf(fp, ">%s.%c.%c\n", buffer, loc_dir ? 'F' : 'B', (seq_dir == loc_dir) == aln_dir ? 'T' : 'F');
-                ptrdiff_t got = deflate_index_extract(in, index, pos.first, buf, pos.second);
-                if (got <= 0)
-                    fprintf(stderr, "zran: extraction failed: %s error\n",
-                            got == Z_MEM_ERROR ? "out of memory" : "input corrupted");
-                else {
-                    fwrite(buf, 1, got, fp);
-                    fprintf(fp, "\n");
+                if (trm_dir[kseq] != 0) {
+                    aln_dir = trm_dir[kseq] == 1;
+
+                    char buffer[ABS_MAX_MER + 1];
+                    int_to_four(buffer, MIN(_t, seq.second), seq.first);
+                    fprintf(fp, ">%s.%c.%c\n", buffer, loc_dir ? 'F' : 'B', (seq_dir == loc_dir) == aln_dir ? 'T' : 'F');
+                    ptrdiff_t got = deflate_index_extract(in, index, pos.first, buf, pos.second);
+                    if (got <= 0)
+                        fprintf(stderr, "zran: extraction failed: %s error\n",
+                                got == Z_MEM_ERROR ? "out of memory" : "input corrupted");
+                    else {
+                        fwrite(buf, 1, got, fp);
+                        fprintf(fp, "\n");
+                    }
+                    output_set.insert(kseq);
+                } else {
+                    fprintf(stderr, "Score direction error!\n");
                 }
-                break;
             }
         }
     }

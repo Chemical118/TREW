@@ -101,21 +101,6 @@ int main(int argc, char** argv) {
             .scan<'d', int>()
             .metavar("THREAD");
 
-    short_command.add_argument("--paired_end")
-            .help("use paired-end sequencing data")
-            .default_value(false)
-            .implicit_value(true);
-
-    short_command.add_argument("--fq1")
-            .help("path to front FASTQ file (required for paired-end mode)")
-            .metavar("FASTQ_FRONT")
-            .nargs(argparse::nargs_pattern::at_least_one);
-
-    short_command.add_argument("--fq2")
-            .help("Path to reverse FASTQ file (required for paired-end mode)")
-            .metavar("FASTQ_REVERSE")
-            .nargs(argparse::nargs_pattern::at_least_one);
-
     short_command.add_argument("-m", "--table_max_mer")
             .help("maximum length of sequence to use table (reduce this option if memory usage is high) [TABLE_MAX_MER <= " + std::to_string(ABS_TABLE_MAX_MER) + "]")
             .default_value(12)
@@ -303,7 +288,7 @@ int main(int argc, char** argv) {
                 throw std::exception();
             }
 
-            std::vector<std::string> fastq_loc_list = long_command.get<std::vector<std::string>>("LONG_FASTQ_LOC");
+            std::vector<std::string> fastq_loc_list = short_command.get<std::vector<std::string>>("SHORT_FASTQ");
             for (const auto& fastq_loc : fastq_loc_list) {
                 std::filesystem::path fastq_path {fastq_loc};
                 if (! std::filesystem::is_regular_file(fastq_loc)) {
@@ -352,7 +337,7 @@ int main(int argc, char** argv) {
     std::vector<gz_index *> gz_index_vector = {};
     std::vector<std::vector<FastqLocData>*> k_loc_vector = {};
     std::vector<FinalFastqOutput> fastq_file_data_vector = {};
-    std::vector<std::pair<KmerSeq, int>>* put_trm;
+    TRMDirVector* put_trm;
 
     bool IS_SHORT = program.is_subcommand_used("short");
 
@@ -385,20 +370,23 @@ int main(int argc, char** argv) {
             exit(-1);
         }
 
-        for (auto& [k, v, _] : *fastq_output.high) {
+        for (auto& [k, v] : *fastq_output.high) {
             if (total_result_high -> contains(k)) {
                 (*total_result_high)[k] = add_data((*total_result_high)[k], v);
             } else {
                 (*total_result_high)[k] = v;
             }
         }
-        for (auto& [k, v, _] : *fastq_output.low) {
+        for (auto& [k, v] : *fastq_output.low) {
             if (total_result_low -> contains(k)) {
                 (*total_result_low)[k] = add_data((*total_result_low)[k], v);
             } else {
                 (*total_result_low)[k] = v;
             }
         }
+
+        delete fastq_output.high;
+        delete fastq_output.low;
     }
 
     delete[] thread_data_list;

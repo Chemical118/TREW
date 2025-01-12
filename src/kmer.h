@@ -39,6 +39,7 @@
 
 #include <absl/numeric/int128.h>
 #include <absl/container/flat_hash_map.h>
+#include <absl/container/flat_hash_set.h>
 
 #include <tuple>
 #include <cstdint>
@@ -50,6 +51,7 @@
 
 #include "zran.h"
 #include <zlib.h>
+#include <filesystem>
 
 extern int MIN_MER;
 extern int MAX_MER;
@@ -94,30 +96,19 @@ struct FastqLocData {
 typedef std::tuple<uint16_t**, uint64_t**, uint128_t**, uint32_t**> ThreadDataTuple;
 typedef std::pair<int, uint128_t> KmerSeq;
 
-struct KmerAnsData {
-    KmerSeq first;
-    FinalData<int64_t> second;
-    bool dir;
-
-    KmerAnsData(KmerSeq  first_,
-                const FinalData<int64_t>& second_,
-                bool dir_)
-            : first(std::move(first_)),
-              second(second_),
-              dir(dir_) {}
-};
-
 typedef absl::flat_hash_map<KmerSeq, uint32_t> ResultMap;
 typedef std::pair<ResultMap*, ResultMap*> ResultMapPair;
 typedef FinalData<ResultMapPair> ResultMapData;
 typedef std::pair<ResultMapData, std::vector<FastqLocData>*> ResultMapPairData;
 
+typedef std::vector<std::pair<KmerSeq, int>> TRMDirVector;
+typedef absl::flat_hash_map<KmerSeq, int> TRMDirMap;
+
 typedef absl::flat_hash_map<uint64_t, uint16_t> CounterMap;
 typedef absl::flat_hash_map<uint128_t, uint16_t> CounterMap_128;
 
 typedef absl::flat_hash_map<KmerSeq, FinalData<int64_t>> FinalFastqData;
-typedef std::vector<KmerAnsData> FinalFastqVector;
-typedef std::vector<std::pair<KmerSeq, FinalData<int64_t>>> LeagcyFinalFastqVector;
+typedef std::vector<std::pair<KmerSeq, FinalData<int64_t>>> FinalFastqVector;
 typedef std::pair<FinalFastqVector*, FinalFastqVector*> FinalFastqVectorPair;
 
 struct QueueData {
@@ -238,7 +229,7 @@ uint128_t reverse_complement_128(uint128_t x);
 
 FinalData<int64_t> add_data(FinalData<int64_t> a, FinalData<int64_t> b);
 
-std::vector<std::pair<KmerSeq, int>>* final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low);
+TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low);
 ResultMap* get_score_map(FinalFastqData* total_result);
 
 ptrdiff_t deflate_index_extract(FILE *in, gz_index *index,
@@ -248,7 +239,7 @@ ptrdiff_t file_extract(FILE *in, off_t offset, unsigned char *buf, size_t len);
 
 void deflate_index_free(gz_index *index);
 
-void get_trm_read(const std::filesystem::path &fastq_path, std::vector<std::pair<KmerSeq, int>>* put_trm,
+void get_trm_read(const std::filesystem::path &fastq_path, TRMDirVector* put_trm,
                    FinalFastqOutput fastq_file_data, gz_index* index, size_t st, size_t nd, char* temp_path);
 
 gz_index *get_thread_safe_index(gz_index* index);
