@@ -353,16 +353,38 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                     right_temp_k_mer = {0, 0};
 
                     if (4 * MIN_MER <= n) {
-                        left_temp_k_mer = k_mer_check(temp_task.buffer, st, st + (n / 2) - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                        if (as_for_read) {
+                            left_temp_k_mer = k_mer_check(temp_task.buffer, st, st + (n / 2) - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                                       k_mer_data, k_mer_counter_list, repeat_check_table, temp_result_left, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &lef_seq);
-
-                        if (left_temp_k_mer.first > 0 || left_temp_k_mer.second > 0) {
+                        } else {
                             right_temp_k_mer = k_mer_check(temp_task.buffer, nd - ((n + 1) / 2) + 1, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {left_temp_k_mer.first > 0 ? nullptr : temp_result_right.first, left_temp_k_mer.second > 0 ? nullptr : temp_result_right.second}, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER));
+                                                               k_mer_data, k_mer_counter_list, repeat_check_table, temp_result_right, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
+                        }
+
+                        if ((as_for_read and (left_temp_k_mer.first > 0 || left_temp_k_mer.second > 0)) or (as_rev_read and (right_temp_k_mer.first > 0 || right_temp_k_mer.second > 0))) {
+                            if (as_for_read) {
+                                right_temp_k_mer = k_mer_check(temp_task.buffer, nd - ((n + 1) / 2) + 1, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {left_temp_k_mer.first > 0 ? nullptr : temp_result_right.first, left_temp_k_mer.second > 0 ? nullptr : temp_result_right.second},
+                                                           k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
+                            } else {
+                                left_temp_k_mer = k_mer_check(temp_task.buffer, st, st + (n / 2) - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                      k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {right_temp_k_mer.first > 0 ? nullptr : temp_result_left.first, right_temp_k_mer.second > 0 ? nullptr : temp_result_left.second},
+                                                      k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &lef_seq);
+                            }
 
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
-                                k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                if (read_type == SIN_READ) {
+                                    k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {result.both.first, nullptr}, k_mer_total_cnt, left_temp_k_mer.first);
+                                } else if (read_type == FOR_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {result.forward.first, nullptr},
+                                                           k_mer_total_cnt, left_temp_k_mer.first, left_temp_k_mer.first);
+                                } else if (read_type == REV_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {result.backward.first, nullptr},
+                                                           k_mer_total_cnt, left_temp_k_mer.first, left_temp_k_mer.first);
+                                }
                             } else if (left_temp_k_mer.first > 0 && right_temp_k_mer.first == 0) {
                                 if (as_for_read) {
                                     for (auto& [seq, cnt] : *(temp_result_left.first)) {
@@ -378,8 +400,18 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             }
 
                             if ((left_temp_k_mer.second == right_temp_k_mer.second) && (left_temp_k_mer.second > 0)) {
-                                k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                if (read_type == SIN_READ) {
+                                    k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {nullptr, result.both.second}, k_mer_total_cnt, left_temp_k_mer.second);
+                                } else if (read_type == FOR_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {nullptr, result.forward.second},
+                                                           k_mer_total_cnt, left_temp_k_mer.second, left_temp_k_mer.second);
+                                } else if (read_type == REV_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {nullptr, result.backward.second},
+                                                           k_mer_total_cnt, left_temp_k_mer.second, left_temp_k_mer.second);
+                                }
                             } else if (left_temp_k_mer.second > 0 && right_temp_k_mer.second == 0) {
                                 if (as_for_read) {
                                     for (auto& [seq, cnt] : *(temp_result_left.second)) {
@@ -400,6 +432,9 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             if (as_rev_read) {
                                 right_temp_k_mer = k_mer_check(temp_task.buffer, nd - ((n + 1) / 2) + 1, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                                                k_mer_data, k_mer_counter_list, repeat_check_table, result.backward, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
+                            } else {
+                                left_temp_k_mer = k_mer_check(temp_task.buffer, st, st + (n / 2) - 1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                      k_mer_data, k_mer_counter_list, repeat_check_table, result.forward, k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &lef_seq);
                             }
                         }
 
@@ -1635,11 +1670,11 @@ FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result
         }
     }
     for (auto& [seq, cnt] : *(result_data.both.second)) {
-        _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
         if (final_result_low.contains(seq)) {
             final_result_low[seq].both = cnt;
         }
         else {
+            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
             final_result_low[seq] = FinalData<int64_t> {0, _t == seq.second ? -1 : 0, cnt};
         }
     }
@@ -1665,11 +1700,11 @@ FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result
         }
     }
     for (auto& [seq, cnt] : *(result_data.both.first)) {
-        _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
         if (final_result_high.contains(seq)) {
             final_result_high[seq].both = cnt;
         }
         else {
+            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
             final_result_high[seq] = FinalData<int64_t> {0, _t == seq.second ? -1 : 0, cnt};
         }
     }
