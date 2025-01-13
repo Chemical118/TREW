@@ -2739,9 +2739,16 @@ TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastq
         for (int i = 0; i < MIN(ABS_MAX_ANS_NUM, score_result_vector.size()); i++) {
             int_to_four(buffer, score_result_vector[i].first.second, score_result_vector[i].first.first);
 
-            char sign = ((*final_output)[i].second == 1) ? '+' :
-                        ((*final_output)[i].second == -1) ? '-' : '?';
-            fprintf(stdout, "%s,%" PRIu32",%c\n", buffer, score_result_vector[i].second.first, sign);
+            int dir = 0;
+            for (auto& [k, v] : *final_output) {
+                if (k == score_result_vector[i].first) {
+                    dir = v;
+                    break;
+                }
+            }
+            char sign = (dir == 1) ? '+' :
+                        (dir == -1) ? '-' : '?';
+            fprintf(stdout, "%d,%s,%" PRIu32",%c\n", score_result_vector[i].first.first, buffer, score_result_vector[i].second.first, sign);
         }
         delete score_result_map;
     } else {
