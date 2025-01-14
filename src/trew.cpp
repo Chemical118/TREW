@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    bool IS_PAIRED_END;
+    bool IS_PAIRED_END = false;
     std::vector<int> paired_end_vector {};
     std::vector<std::filesystem::path> fastq_path_list {};
     if (program.is_subcommand_used("long")) {
@@ -330,22 +330,23 @@ int main(int argc, char** argv) {
                     throw std::exception();
                 }
 
-                // Check if all fq1 and fq2 files exist
-                for (const auto& fastq_loc : fq1_loc_list) {
-                    if (!std::filesystem::is_regular_file(fastq_loc)) {
-                        std::cerr << fastq_loc << " : file not found\n";
+                for (size_t i = 0; i < fq1_loc_list.size(); i++) {
+                    const auto& fq1_loc = fq1_loc_list[i];
+                    if (!std::filesystem::is_regular_file(fq1_loc)) {
+                        std::cerr << fq1_loc << " : file not found\n";
                         throw std::exception();
                     }
-                    fastq_path_list.emplace_back(fastq_loc);
-                    paired_end_vector.push_back(FOR_READ);
-                }
 
-                for (const auto& fastq_loc : fq2_loc_list) {
-                    if (!std::filesystem::is_regular_file(fastq_loc)) {
-                        std::cerr << fastq_loc << " : file not found\n";
+                    const auto& fq2_loc = fq2_loc_list[i];
+                    if (!std::filesystem::is_regular_file(fq2_loc)) {
+                        std::cerr << fq2_loc << " : file not found\n";
                         throw std::exception();
                     }
-                    fastq_path_list.emplace_back(fastq_loc);
+
+                    fastq_path_list.emplace_back(fq1_loc);
+                    paired_end_vector.push_back(FOR_READ);
+
+                    fastq_path_list.emplace_back(fq2_loc);
                     paired_end_vector.push_back(REV_READ);
                 }
             } else {
@@ -409,7 +410,6 @@ int main(int argc, char** argv) {
     std::vector<std::string> gz_extension_list = std::vector<std::string> {".gz", ".bgz"};
 
     std::vector<gz_index *> gz_index_vector = {};
-    std::vector<std::vector<FastqLocData>*> k_loc_vector = {};
     std::vector<FinalFastqOutput> fastq_file_data_vector = {};
     TRMDirVector* put_trm;
 
@@ -472,6 +472,78 @@ int main(int argc, char** argv) {
     }
 
     delete[] thread_data_list;
+
+    if (IS_PAIRED_END and INDEX) {
+        ResultMapData result_data = ResultMapData {{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {nullptr, nullptr}};
+
+        auto extract_k_mer_128_ = set_extract_k_mer_128();
+        auto k_mer_data_128 = set_k_mer_data_128();
+        auto k_mer_counter = set_k_mer_counter();
+        auto k_mer_counter_list = set_k_mer_counter_list();
+        int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
+
+        CounterMap_128* k_mer_counter_map = nullptr;
+        if (TABLE_MAX_MER < MAX_MER) {
+            k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
+        }
+
+        for (size_t i = 0; i < fastq_path_list.size() / 2; ++i) {
+            FILE* fp1;
+            if (gz_index_vector[2 * i] == NULL) {
+                fp1 = fopen(fastq_path_list[2 * i].c_str(), "r");
+            } else {
+                fp1 = fopen(fastq_path_list[2 * i].c_str(), "rb");
+            }
+
+            FILE* fp2;
+            if (gz_index_vector[2 * i + 1] == NULL) {
+                fp2 = fopen(fastq_path_list[2 * i + 1].c_str(), "r");
+            } else {
+                fp2 = fopen(fastq_path_list[2 * i + 1].c_str(), "rb");
+            }
+
+            paired_end_bonus_result(result_data, rot_table, repeat_check_table, extract_k_mer_128_,
+                                    k_mer_counter, k_mer_counter_map,
+                                    k_mer_data_128, k_mer_counter_list, k_mer_total_cnt,
+                                    fastq_file_data_vector[2 * i].k_mer_loc_vector, fastq_file_data_vector[2 * i + 1].k_mer_loc_vector,
+                                    fp1, fp2,
+                                    gz_index_vector[2 * i], gz_index_vector[2 * i + 1]);
+        }
+
+        for (auto& [seq, cnt] : *(result_data.backward.first)) {
+            (*(result_data.forward.first))[KmerSeq {seq.first, get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first)}] += cnt;
+        }
+        for (auto& [seq, cnt] : *(result_data.backward.second)) {
+            (*(result_data.forward.second))[KmerSeq {seq.first, get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first)}] += cnt;
+        }
+
+        uint128_t _t;
+        uint128_t kseq;
+
+        for (auto& [seq, cnt] : *(result_data.forward.second)) {
+            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+            kseq = MIN(_t, seq.second);
+
+            if (kseq == seq.second) {
+                (*total_result_low)[KmerSeq {seq.first, kseq}].forward += cnt;
+            }
+            else {
+                (*total_result_low)[KmerSeq {seq.first, kseq}].backward += cnt;
+            }
+        }
+        for (auto& [seq, cnt] : *(result_data.forward.first)) {
+            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+            kseq = MIN(_t, seq.second);
+
+            if (kseq == seq.second) {
+                (*total_result_high)[KmerSeq {seq.first, kseq}].forward += cnt;
+            }
+            else {
+                (*total_result_high)[KmerSeq {seq.first, kseq}].backward += cnt;
+            }
+        }
+    }
+
     put_trm = final_process_output(total_result_high, total_result_low);
 
     if (INDEX) {

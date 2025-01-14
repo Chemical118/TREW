@@ -82,17 +82,20 @@ struct FastqLocData {
     std::pair<int64_t, int64_t> pos;
     KmerData rht_kmer;
     KmerData lef_kmer;
+    int64_t fq_cnt;
     std::pair<uint128_t, uint128_t> rht_seq;
     std::pair<uint128_t, uint128_t> lef_seq;
 
     FastqLocData(const std::pair<int64_t, int64_t>& pos_,
                  KmerData  rht_kmer_,
                  KmerData  lef_kmer_,
+                 int64_t fq_cnt_,
                  const std::pair<uint128_t, uint128_t>& rht_seq_,
                  const std::pair<uint128_t, uint128_t>& lef_seq_)
             : pos(pos_),
               rht_kmer(std::move(rht_kmer_)),
               lef_kmer(std::move(lef_kmer_)),
+              fq_cnt(fq_cnt_),
               rht_seq(rht_seq_),
               lef_seq(lef_seq_) {}
 };
@@ -119,6 +122,7 @@ struct QueueData {
     char* buffer;
     LocationVector* loc_vector;
     int64_t buf_off;
+    int64_t fq_cnt;
 };
 
 struct FinalFastqOutput {
@@ -143,6 +147,7 @@ uint16_t** set_k_mer_counter();
 
 uint64_t** set_k_mer_data();
 uint128_t** set_k_mer_data_128();
+KmerSeq rot_reverse_complement(KmerSeq seq);
 
 uint32_t** set_k_mer_counter_list();
 
@@ -245,6 +250,13 @@ void deflate_index_free(gz_index *index);
 
 void get_trm_read(const std::filesystem::path &fastq_path, TRMDirVector* put_trm,
                    FinalFastqOutput fastq_file_data, gz_index* index, size_t st, size_t nd, char* temp_path);
+
+void paired_end_bonus_result(ResultMapData result, uint32_t** rot_table, uint8_t** repeat_check_table, const uint128_t *extract_k_mer,
+                             uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
+                             uint128_t** k_mer_data, uint32_t** k_mer_counter_list, int16_t* k_mer_total_cnt,
+                             std::vector<FastqLocData>* fq1_k_loc_vector,std::vector<FastqLocData>* fq2_k_loc_vector,
+                             FILE* fp1, FILE* fp2,
+                             gz_index* fq1_index, gz_index* fq2_index);
 
 gz_index *get_thread_safe_index(gz_index* index);
 #endif //TROW_KMER_H

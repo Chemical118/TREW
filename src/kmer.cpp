@@ -300,6 +300,9 @@ uint128_t reverse_complement_128(uint128_t x) {
     return ~x;
 }
 
+KmerSeq rot_reverse_complement(KmerSeq seq) {
+    return KmerSeq{seq.first, get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first)};
+}
 
 FinalData<int64_t> add_data(FinalData<int64_t> a, FinalData<int64_t> b) {
     return FinalData<int64_t> {a.forward + b.forward, a.backward + b.backward, a.both + b.both};
@@ -337,6 +340,7 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
             if (temp_task.loc_vector == nullptr) {
                 break;
             }
+            int64_t cnt = 0;
             for (auto& [st, nd]: *(temp_task.loc_vector)) {
                 std::pair<uint64_t, uint64_t> lef_seq, rht_seq;
                 n = nd - st + 1;
@@ -355,18 +359,8 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                                                            k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
 
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
-                                if (read_type == SIN_READ) {
-                                    k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {result.both.first, nullptr}, k_mer_total_cnt, left_temp_k_mer.first);
-                                } else if (read_type == FOR_READ) {
-                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {result.forward.first, nullptr},
-                                                           k_mer_total_cnt, left_temp_k_mer.first, left_temp_k_mer.first);
-                                } else if (read_type == REV_READ) {
-                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {result.backward.first, nullptr},
-                                                           k_mer_total_cnt, left_temp_k_mer.first, left_temp_k_mer.first);
-                                }
                             } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                     (*(result.forward.first))[seq] += cnt;
@@ -378,18 +372,8 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             }
 
                             if ((left_temp_k_mer.second == right_temp_k_mer.second) && (left_temp_k_mer.second > 0)) {
-                                if (read_type == SIN_READ) {
-                                    k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {nullptr, result.both.second}, k_mer_total_cnt, left_temp_k_mer.second);
-                                } else if (read_type == FOR_READ) {
-                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {nullptr, result.forward.second},
-                                                           k_mer_total_cnt, left_temp_k_mer.second, left_temp_k_mer.second);
-                                } else if (read_type == REV_READ) {
-                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {nullptr, result.backward.second},
-                                                           k_mer_total_cnt, left_temp_k_mer.second, left_temp_k_mer.second);
-                                }
                             } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                     (*(result.forward.second))[seq] += cnt;
@@ -420,8 +404,9 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                     }
 
                     if (INDEX and left_temp_k_mer.first != right_temp_k_mer.first or left_temp_k_mer.second != right_temp_k_mer.second) {
-                        loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + st, n}, right_temp_k_mer, left_temp_k_mer, rht_seq, lef_seq);
+                        loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + st, n}, right_temp_k_mer, left_temp_k_mer, temp_task.fq_cnt - cnt, rht_seq, lef_seq);
                     }
+                    cnt++;
                 }
             }
 
@@ -438,6 +423,7 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
             if (temp_task.loc_vector == nullptr) {
                 break;
             }
+            int64_t cnt = 0;
             for (auto& [st, nd]: *(temp_task.loc_vector)) {
                 std::pair<uint128_t, uint128_t> lef_seq, rht_seq;
                 n = nd - st + 1;
@@ -501,8 +487,9 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                     }
 
                     if (INDEX and left_temp_k_mer.first != right_temp_k_mer.first or left_temp_k_mer.second != right_temp_k_mer.second) {
-                        loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + st, n}, right_temp_k_mer, left_temp_k_mer, rht_seq, lef_seq);
+                        loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + st, n}, right_temp_k_mer, left_temp_k_mer, temp_task.fq_cnt - cnt, rht_seq, lef_seq);
                     }
+                    cnt++;
                 }
             }
 
@@ -548,7 +535,6 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
     int snum;
     int mid;
     int sl, mid_bonus_sl;
-    bool is_total;
 
     uint128_t seq_rev;
 
@@ -690,7 +676,7 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                 temp_result_left.second -> clear();
 
                 if (INDEX and (si.first <= snum or si.second <= snum) and (k_mer.first != 0 or k_mer.second != 0 or lef_k_mer.first != 0 or lef_k_mer.second != 0)) {
-                    loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + (int64_t) st, nd - st + 1}, k_mer, lef_k_mer, rht_seq, lef_seq);
+                    loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + (int64_t) st, nd - st + 1}, k_mer, lef_k_mer, 0, rht_seq, lef_seq);
                 }
             }
 
@@ -831,7 +817,7 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                 temp_result_left.second -> clear();
 
                 if (INDEX and (si.first != snum + 1 or si.second == snum + 1) and (k_mer.first != 0 or k_mer.second != 0 or lef_k_mer.first != 0 or lef_k_mer.second != 0)) {
-                    loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + (int64_t) st, nd - st + 1}, k_mer, lef_k_mer, rht_seq, lef_seq);
+                    loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + (int64_t) st, nd - st + 1}, k_mer, lef_k_mer, 0, rht_seq, lef_seq);
                 }
             }
 
@@ -857,6 +843,8 @@ void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue) {
     off_t totout = 0;
     off_t bytes_read;
     off_t avail_out = 0;
+
+    int64_t fq_cnt = 0;
 
     unsigned char* buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + 1));
     unsigned char* bef_buffer;
@@ -891,6 +879,7 @@ void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue) {
                             exit (EXIT_FAILURE);
                         }
                         seq_cnt += 1;
+                        fq_cnt += 1;
                         loc_vector -> emplace_back(idx + 1, i - 1);
                     }
                     idx = i;
@@ -922,7 +911,7 @@ void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue) {
                 }
 
                 bef_queue_data = QueueData{reinterpret_cast<char*>(buffer), loc_vector,
-                                (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) avail_out};
+                                (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) avail_out, fq_cnt};
 
 
                 std::swap(bef_buffer, buffer);
@@ -1027,6 +1016,8 @@ void read_fastq_gz_thread(FILE* fp, gz_index **built, TBBQueue* buffer_task_queu
     int shift = 0;
     int bef_shift;
     int idx;
+
+    int64_t fq_cnt = 0;
 
     // ZLIB index
     *built = NULL;
@@ -1147,6 +1138,7 @@ void read_fastq_gz_thread(FILE* fp, gz_index **built, TBBQueue* buffer_task_queu
                             exit (EXIT_FAILURE);
                         }
                         seq_cnt += 1;
+                        fq_cnt += 1;
                         loc_vector -> emplace_back(idx + 1, i - 1);
                     }
                     idx = i;
@@ -1178,7 +1170,7 @@ void read_fastq_gz_thread(FILE* fp, gz_index **built, TBBQueue* buffer_task_queu
                  }
 
                  bef_queue_data = QueueData{reinterpret_cast<char*>(buffer), loc_vector,
-                                 (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) index->strm.avail_out};
+                                 (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) index->strm.avail_out, fq_cnt};
 
 
                  std::swap(bef_buffer, buffer);
@@ -1798,24 +1790,28 @@ uint32_t** set_rotation_table(uint8_t** repeat_check_table) {
 }
 
 uint16_t** set_k_mer_counter() {
-    uint16_t** cnt = (uint16_t**) malloc(sizeof(uint16_t*) * (MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER + 1));
-    if (cnt == nullptr) {
-        fprintf(stderr, "memory allocation failure\n");
-        exit(EXIT_FAILURE);
-    }
-
-    uint32_t max_ind;
-    for (int i = 0; i <= MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER; i++) {
-        max_ind =  1 << (2 * (i + MIN_MER));
-
-        cnt[i] = (uint16_t*) calloc(max_ind, sizeof(uint16_t));
-        if (cnt[i] == nullptr)  {
+    if (MIN_MER <= TABLE_MAX_MER) {
+        uint16_t** cnt = (uint16_t**) malloc(sizeof(uint16_t*) * (MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER + 1));
+        if (cnt == nullptr) {
             fprintf(stderr, "memory allocation failure\n");
             exit(EXIT_FAILURE);
         }
-    }
 
-    return cnt;
+        uint32_t max_ind;
+        for (int i = 0; i <= MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER; i++) {
+            max_ind =  1 << (2 * (i + MIN_MER));
+
+            cnt[i] = (uint16_t*) calloc(max_ind, sizeof(uint16_t));
+            if (cnt[i] == nullptr)  {
+                fprintf(stderr, "memory allocation failure\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        return cnt;
+    } else {
+        return nullptr;
+    }
 }
 
 uint64_t** set_k_mer_data() {
@@ -1855,20 +1851,24 @@ uint128_t** set_k_mer_data_128() {
 }
 
 uint32_t** set_k_mer_counter_list() {
-    uint32_t** k_mer_counter_list = (uint32_t**) malloc(sizeof(uint32_t*) * (MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER + 1));
-    if (k_mer_counter_list == nullptr) {
-        fprintf(stderr, "memory allocation failure\n");
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i = 0; i < MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER + 1; i++) {
-        k_mer_counter_list[i] = (uint32_t*) calloc(MAX_SEQ, sizeof(uint32_t));
-        if (k_mer_counter_list[i] == nullptr)  {
+    if (MIN_MER <= TABLE_MAX_MER) {
+        uint32_t** k_mer_counter_list = (uint32_t**) malloc(sizeof(uint32_t*) * (MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER + 1));
+        if (k_mer_counter_list == nullptr) {
             fprintf(stderr, "memory allocation failure\n");
             exit(EXIT_FAILURE);
         }
+
+        for (int i = 0; i < MIN(MAX_MER, TABLE_MAX_MER) - MIN_MER + 1; i++) {
+            k_mer_counter_list[i] = (uint32_t*) calloc(MAX_SEQ, sizeof(uint32_t));
+            if (k_mer_counter_list[i] == nullptr)  {
+                fprintf(stderr, "memory allocation failure\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        return k_mer_counter_list;
+    } else {
+        return nullptr;
     }
-    return k_mer_counter_list;
 }
 
 void fill_rotation_table(uint32_t* rot, int k, uint32_t seq, uint8_t** repeat_check_table) {
@@ -2864,7 +2864,7 @@ void get_trm_read(const std::filesystem::path &fastq_path, TRMDirVector* put_trm
 
     FILE *fp = fopen(temp_path, "w");
     for (size_t i = st; i < nd; i++) {
-        auto &[pos, rht, lef, rht_seq, lef_seq] = (*fastq_file_data.k_mer_loc_vector)[i];
+        auto &[pos, rht, lef, _, rht_seq, lef_seq] = (*fastq_file_data.k_mer_loc_vector)[i];
 
         if (buf_size < pos.second) {
             free(buf);
@@ -2944,4 +2944,71 @@ gz_index *get_thread_safe_index(gz_index* index) {
 
     inflateInit2(&safe_index->strm, index->mode);
     return safe_index;
+}
+
+void paired_end_bonus_result(ResultMapData result, uint32_t** rot_table, uint8_t** repeat_check_table, const uint128_t *extract_k_mer,
+                             uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
+                             uint128_t** k_mer_data, uint32_t** k_mer_counter_list, int16_t* k_mer_total_cnt,
+                             std::vector<FastqLocData>* fq1_k_loc_vector, std::vector<FastqLocData>* fq2_k_loc_vector,
+                             FILE* fp1, FILE* fp2,
+                             gz_index* fq1_index, gz_index* fq2_index) {
+
+    std::sort(fq1_k_loc_vector->begin(), fq1_k_loc_vector->end(), [](const FastqLocData& a, const FastqLocData& b) {
+                  return a.fq_cnt < b.fq_cnt;
+    });
+    std::sort(fq2_k_loc_vector->begin(), fq2_k_loc_vector->end(), [](const FastqLocData& a, const FastqLocData& b) {
+                  return a.fq_cnt < b.fq_cnt;
+    });
+
+    unsigned char buf [MAX_SEQ + 1];
+    auto add_bonus_data = [&](int fq1_lef_kmer, int fq2_lef_kmer, int fq1_rht_kmer, int fq2_rht_kmer,
+                              KmerSeq fq1_lef_seq, KmerSeq fq2_lef_seq, KmerSeq fq1_rht_seq, KmerSeq fq2_rht_seq,
+                              std::pair<int64_t, int64_t> fq1_pos, std::pair<int64_t, int64_t> fq2_pos, gz_index* fq1_gz_index, gz_index* fq2_gz_index,
+                              bool is_high) {
+        // (k, n, n, n)
+        if ((fq1_lef_kmer != fq1_rht_kmer) and (fq1_rht_kmer == fq2_lef_kmer) and (fq2_lef_kmer == fq2_rht_kmer) and fq2_lef_kmer > 0
+            and rot_reverse_complement(fq1_rht_seq) == fq2_lef_seq and fq2_lef_seq == fq2_rht_seq) {
+            ptrdiff_t got = deflate_index_extract(fp2, fq2_gz_index, fq2_pos.first, buf, fq2_pos.second);
+
+            k_mer_check_128(reinterpret_cast<char*>(buf), 0, got, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                            k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {is_high ? result.backward.first : nullptr, is_high ? nullptr : result.backward.second},
+                            k_mer_total_cnt, fq1_rht_kmer, fq1_rht_kmer);
+        }
+
+        // (n, n, n, k)
+        if ((fq1_lef_kmer == fq1_rht_kmer) and (fq1_rht_kmer == fq2_lef_kmer) and (fq2_lef_kmer != fq2_rht_kmer) and fq2_lef_kmer > 0
+            and rot_reverse_complement(fq2_lef_seq) == fq1_rht_seq and fq1_rht_seq == fq1_lef_seq) {
+            ptrdiff_t got = deflate_index_extract(fp1, fq1_gz_index, fq1_pos.first, buf, fq1_pos.second);
+
+            k_mer_check_128(reinterpret_cast<char*>(buf), 0, got, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                            k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {is_high ? result.forward.first : nullptr, is_high ? nullptr : result.forward.second},
+                            k_mer_total_cnt, fq2_lef_kmer, fq2_lef_kmer);
+
+        }
+    };
+
+    size_t i = 0, j = 0;
+    while (i < fq1_k_loc_vector->size() && j < fq2_k_loc_vector->size()) {
+        const FastqLocData& fq1_data = (*fq1_k_loc_vector)[i];
+        const FastqLocData& fq2_data = (*fq2_k_loc_vector)[j];
+
+        if (fq1_data.fq_cnt == fq2_data.fq_cnt) {
+            add_bonus_data(fq1_data.lef_kmer.first, fq2_data.lef_kmer.first, fq1_data.rht_kmer.first, fq2_data.rht_kmer.first,
+                           KmerSeq {fq1_data.lef_kmer.first, fq1_data.lef_seq.first}, KmerSeq {fq2_data.lef_kmer.first, fq2_data.lef_seq.first},
+                           KmerSeq {fq1_data.rht_kmer.first, fq1_data.rht_seq.first}, KmerSeq {fq2_data.rht_kmer.first, fq2_data.rht_seq.first},
+                           fq1_data.pos, fq2_data.pos, fq1_index, fq2_index, true);
+
+            add_bonus_data(fq1_data.lef_kmer.second, fq2_data.lef_kmer.second, fq1_data.rht_kmer.second, fq2_data.rht_kmer.second,
+                           KmerSeq {fq1_data.lef_kmer.second, fq1_data.lef_seq.second}, KmerSeq {fq2_data.lef_kmer.second, fq2_data.lef_seq.second},
+                           KmerSeq {fq1_data.rht_kmer.second, fq1_data.rht_seq.second}, KmerSeq {fq2_data.rht_kmer.second, fq2_data.rht_seq.second},
+                           fq1_data.pos, fq2_data.pos, fq1_index, fq2_index, false);
+
+            ++i;
+            ++j;
+        } else if (fq1_data.fq_cnt < fq2_data.fq_cnt) {
+            ++i;
+        } else {
+            ++j;
+        }
+    }
 }
