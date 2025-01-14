@@ -305,7 +305,7 @@ FinalData<int64_t> add_data(FinalData<int64_t> a, FinalData<int64_t> b) {
     return FinalData<int64_t> {a.forward + b.forward, a.backward + b.backward, a.both + b.both};
 }
 
-ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table) {
+ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table, const int read_type) {
     auto [k_mer_counter, k_mer_data, k_mer_data_128, k_mer_counter_list] = thread_data -> init_check();
 
     int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
@@ -355,8 +355,18 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                                                            k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &rht_seq);
 
                             if ((left_temp_k_mer.first == right_temp_k_mer.first) && (left_temp_k_mer.first > 0)) {
-                                k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                if (read_type == SIN_READ) {
+                                    k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {result.both.first, nullptr}, k_mer_total_cnt, left_temp_k_mer.first);
+                                } else if (read_type == FOR_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {result.forward.first, nullptr},
+                                                           k_mer_total_cnt, left_temp_k_mer.first, left_temp_k_mer.first);
+                                } else if (read_type == REV_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {result.backward.first, nullptr},
+                                                           k_mer_total_cnt, left_temp_k_mer.first, left_temp_k_mer.first);
+                                }
                             } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                     (*(result.forward.first))[seq] += cnt;
@@ -368,8 +378,18 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                             }
 
                             if ((left_temp_k_mer.second == right_temp_k_mer.second) && (left_temp_k_mer.second > 0)) {
-                                k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                if (read_type == SIN_READ) {
+                                    k_mer_target(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                              k_mer_data, k_mer_counter_list, repeat_check_table, {nullptr, result.both.second}, k_mer_total_cnt, left_temp_k_mer.second);
+                                } else if (read_type == FOR_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {nullptr, result.forward.second},
+                                                           k_mer_total_cnt, left_temp_k_mer.second, left_temp_k_mer.second);
+                                } else if (read_type == REV_READ) {
+                                    k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                           k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {nullptr, result.backward.second},
+                                                           k_mer_total_cnt, left_temp_k_mer.second, left_temp_k_mer.second);
+                                }
                             } else {
                                 for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                     (*(result.forward.second))[seq] += cnt;
@@ -1411,7 +1431,7 @@ void read_fastq_gz_thread_long(FILE* fp, gz_index **built, TBBQueue* buffer_task
 
 FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                   uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                                  ThreadData* thread_data_list, bool is_gz, gz_index **built) {
+                                  ThreadData* thread_data_list, bool is_gz, gz_index **built, const int read_type) {
     ResultMapPairData* result_list = (ResultMapPairData*) malloc(sizeof(ResultMapPairData) * NUM_THREAD);
 
     TBBQueue buffer_task_queue {};
@@ -1422,8 +1442,8 @@ FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_tabl
     }
 
     for (int i = 0; i < NUM_THREAD - 1; i++) {
-        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
-            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table, &read_type]{
+            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table, read_type);
         });
     }
 
@@ -1456,11 +1476,11 @@ FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_tabl
 
         int i = NUM_THREAD - 1;
         if (NUM_THREAD > 1) {
-            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
-                result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table, &read_type]{
+                result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table, read_type);
             });
         } else {
-            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table, read_type);
         }
     } else {
         result_list[NUM_THREAD - 1] = ResultMapPairData {{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}}, new std::vector<FastqLocData> {}};
