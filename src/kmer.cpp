@@ -2971,7 +2971,7 @@ void paired_end_bonus_result(ResultMapData result, uint32_t** rot_table, uint8_t
             ptrdiff_t got = deflate_index_extract(fp2, fq2_gz_index, fq2_pos.first, buf, fq2_pos.second);
 
             k_mer_check_128(reinterpret_cast<char*>(buf), 0, got, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                            k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {is_high ? result.backward.first : nullptr, is_high ? nullptr : result.backward.second},
+                            k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {is_high ? result.forward.first : nullptr, is_high ? nullptr : result.forward.second},
                             k_mer_total_cnt, fq1_rht_kmer, fq1_rht_kmer);
         }
 
