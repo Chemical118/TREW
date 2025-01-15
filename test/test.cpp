@@ -298,7 +298,7 @@ BOOST_AUTO_TEST_CASE(main_test_32) {
             gz_index* index = NULL;
             BOOST_CHECK_NO_THROW(process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
                                  extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                 thread_data_list, is_gz, &index));
+                                 thread_data_list, is_gz, &index, SIN_READ));
         }
     }
     delete[] thread_data_list;
@@ -345,7 +345,7 @@ BOOST_AUTO_TEST_CASE(main_test_64) {
             gz_index* index = NULL;
             BOOST_CHECK_NO_THROW(process_kmer(fastq_path.string().c_str(), repeat_check_table, rot_table,
                                               extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                              thread_data_list, is_gz, &index));
+                                              thread_data_list, is_gz, &index, SIN_READ));
         }
     }
     delete[] thread_data_list;
