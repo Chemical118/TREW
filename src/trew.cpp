@@ -490,16 +490,16 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < fastq_path_list.size() / 2; ++i) {
             FILE* fp1;
             if (gz_index_vector[2 * i] == NULL) {
-                fp1 = fopen(fastq_path_list[2 * i].c_str(), "r");
+                fp1 = fopen(fastq_path_list[2 * i].string().c_str(), "r");
             } else {
-                fp1 = fopen(fastq_path_list[2 * i].c_str(), "rb");
+                fp1 = fopen(fastq_path_list[2 * i].string().c_str(), "rb");
             }
 
             FILE* fp2;
             if (gz_index_vector[2 * i + 1] == NULL) {
-                fp2 = fopen(fastq_path_list[2 * i + 1].c_str(), "r");
+                fp2 = fopen(fastq_path_list[2 * i + 1].string().c_str(), "r");
             } else {
-                fp2 = fopen(fastq_path_list[2 * i + 1].c_str(), "rb");
+                fp2 = fopen(fastq_path_list[2 * i + 1].string().c_str(), "rb");
             }
 
             paired_end_bonus_result(result_data, rot_table, repeat_check_table, extract_k_mer_128_,
