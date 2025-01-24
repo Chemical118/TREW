@@ -409,47 +409,49 @@ int main(int argc, char** argv) {
     ThreadData* thread_data_list = new ThreadData[NUM_THREAD];
     std::vector<std::string> gz_extension_list = std::vector<std::string> {".gz", ".bgz"};
 
-    std::vector<gz_index *> gz_index_vector = {};
-    std::vector<FinalFastqOutput> fastq_file_data_vector = {};
-    TRMDirVector* put_trm;
-
     bool IS_SHORT = program.is_subcommand_used("short");
+    bool is_pair = IS_SHORT and IS_PAIRED_END;
 
     FinalFastqOutput fastq_output;
-    for (size_t i = 0; i < fastq_path_list.size(); ++i) {
-        const auto& fastq_path = fastq_path_list[i];
-
-        bool is_gz = false;
-        std::string fastq_ext = fastq_path.extension().string();
-        for (const auto& ext : gz_extension_list) {
-            if (ext == fastq_ext) {
-                is_gz = true;
-                break;
-            }
+    for (size_t i = 0; i < fastq_path_list.size() / (is_pair ? 2 : 1); ++i) {
+        std::vector<std::filesystem::path> fastq_tmp_path = {};
+        if (is_pair) {
+            fastq_tmp_path.emplace_back(fastq_path_list[2 * i]);
+            fastq_tmp_path.emplace_back(fastq_path_list[2 * i + 1]);
+        } else {
+            fastq_tmp_path.emplace_back(fastq_path_list[i]);
         }
 
-        gz_index* index = NULL;
+        std::vector<bool> is_gz_vec = {};
+        for (auto& path : fastq_tmp_path) {
+            std::string fastq_ext = path.extension().string();
+            bool t = false;
+            for (const auto& ext : gz_extension_list) {
+                if (ext == fastq_ext) {
+                    t = true;
+                    break;
+                }
+            }
+            is_gz_vec.emplace_back(t);
+        }
+
+
+
         if (IS_SHORT) {
             if (IS_PAIRED_END) {
-                fastq_output = process_kmer(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
+                fastq_output = process_kmer_pair(std::filesystem::canonical(fastq_tmp_path[0]).string().c_str(),
+                                        std::filesystem::canonical(fastq_tmp_path[1]).string().c_str(), repeat_check_table, rot_table,
                                             extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                            thread_data_list, is_gz, &index, paired_end_vector[i]);
+                                            thread_data_list, is_gz_vec[0], is_gz_vec[1]);
             } else {
-                fastq_output = process_kmer(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
+                fastq_output = process_kmer(std::filesystem::canonical(fastq_tmp_path[0]).string().c_str(), repeat_check_table, rot_table,
                                             extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                            thread_data_list, is_gz, &index, SIN_READ);
+                                            thread_data_list, is_gz_vec[0]);
             }
         } else {
-            fastq_output = process_kmer_long(std::filesystem::canonical(fastq_path).string().c_str(), repeat_check_table, rot_table,
+            fastq_output = process_kmer_long(std::filesystem::canonical(fastq_tmp_path[0]).string().c_str(), repeat_check_table, rot_table,
                                               extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                              thread_data_list, is_gz, &index);
-        }
-        gz_index_vector.push_back(index);
-        fastq_file_data_vector.push_back(fastq_output);
-
-        if (INDEX and ((is_gz and index == NULL) or (not is_gz and index != NULL))) {
-            fprintf(stderr, "ZLIB index error\n");
-            exit(-1);
+                                              thread_data_list, is_gz_vec[1]);
         }
 
         for (auto& [k, v] : *fastq_output.high) {
@@ -473,131 +475,7 @@ int main(int argc, char** argv) {
 
     delete[] thread_data_list;
 
-    if (IS_PAIRED_END and INDEX) {
-        ResultMapData result_data = ResultMapData {{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {nullptr, nullptr}};
 
-        auto extract_k_mer_128_ = set_extract_k_mer_128();
-        auto k_mer_data_128 = set_k_mer_data_128();
-        auto k_mer_counter = set_k_mer_counter();
-        auto k_mer_counter_list = set_k_mer_counter_list();
-        int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
-
-        CounterMap_128* k_mer_counter_map = nullptr;
-        if (TABLE_MAX_MER < MAX_MER) {
-            k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
-        }
-
-        for (size_t i = 0; i < fastq_path_list.size() / 2; ++i) {
-            FILE* fp1;
-            if (gz_index_vector[2 * i] == NULL) {
-                fp1 = fopen(fastq_path_list[2 * i].string().c_str(), "r");
-            } else {
-                fp1 = fopen(fastq_path_list[2 * i].string().c_str(), "rb");
-            }
-
-            FILE* fp2;
-            if (gz_index_vector[2 * i + 1] == NULL) {
-                fp2 = fopen(fastq_path_list[2 * i + 1].string().c_str(), "r");
-            } else {
-                fp2 = fopen(fastq_path_list[2 * i + 1].string().c_str(), "rb");
-            }
-
-            paired_end_bonus_result(result_data, rot_table, repeat_check_table, extract_k_mer_128_,
-                                    k_mer_counter, k_mer_counter_map,
-                                    k_mer_data_128, k_mer_counter_list, k_mer_total_cnt,
-                                    fastq_file_data_vector[2 * i].k_mer_loc_vector, fastq_file_data_vector[2 * i + 1].k_mer_loc_vector,
-                                    fp1, fp2,
-                                    gz_index_vector[2 * i], gz_index_vector[2 * i + 1]);
-        }
-
-        for (auto& [seq, cnt] : *(result_data.backward.first)) {
-            (*(result_data.forward.first))[KmerSeq {seq.first, get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first)}] += cnt;
-        }
-        for (auto& [seq, cnt] : *(result_data.backward.second)) {
-            (*(result_data.forward.second))[KmerSeq {seq.first, get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first)}] += cnt;
-        }
-
-        uint128_t _t;
-        uint128_t kseq;
-
-        for (auto& [seq, cnt] : *(result_data.forward.second)) {
-            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
-            kseq = MIN(_t, seq.second);
-
-            if (kseq == seq.second) {
-                (*total_result_low)[KmerSeq {seq.first, kseq}].forward += cnt;
-            }
-            else {
-                (*total_result_low)[KmerSeq {seq.first, kseq}].backward += cnt;
-            }
-        }
-        for (auto& [seq, cnt] : *(result_data.forward.first)) {
-            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
-            kseq = MIN(_t, seq.second);
-
-            if (kseq == seq.second) {
-                (*total_result_high)[KmerSeq {seq.first, kseq}].forward += cnt;
-            }
-            else {
-                (*total_result_high)[KmerSeq {seq.first, kseq}].backward += cnt;
-            }
-        }
-    }
-
-    put_trm = final_process_output(total_result_high, total_result_low);
-
-    if (INDEX) {
-        std::vector<std::vector<char*>> temp_file_loc_vector = {};
-
-        for (int i = 0; i < fastq_file_data_vector.size(); i++) {
-            size_t data_size = fastq_file_data_vector[i].k_mer_loc_vector -> size();
-            size_t chunk_size = data_size / NUM_THREAD;
-
-            std::vector<char*> temp_file_list;
-
-            for (size_t j = 0; j < NUM_THREAD; ++j) {
-				std::string template_loc = (std::filesystem::temp_directory_path() / "tmp_trew_XXXXXX").string();
-				char* template_loc_buf = new char[template_loc.size() + 1];
-				std::strcpy(template_loc_buf, template_loc.c_str());
-#ifdef _WIN32
-			  	template_loc_buf = _mktemp(template_loc_buf);
-#else
-				int fd = mkstemp(template_loc_buf);
-				close(fd);
-#endif
-				temp_file_list.emplace_back(template_loc_buf);
-            }
-
-            tbb::task_arena arena(NUM_THREAD);
-            arena.execute([&]{
-                tbb::parallel_for(0, NUM_THREAD, 1, [&](size_t thread_idx) {
-                    size_t st = thread_idx * chunk_size;
-                    size_t nd = (thread_idx == NUM_THREAD -1) ? data_size : st + chunk_size;
-                    get_trm_read(fastq_path_list[i], put_trm, fastq_file_data_vector[i],
-								 get_thread_safe_index(gz_index_vector[i]), st, nd, temp_file_list[thread_idx]);
-                });
-            });
-
-            temp_file_loc_vector.push_back(temp_file_list);
-        }
-
-        auto trm_out_loc = fastq_path_list[0].string() + ".trm_read.fa";
-        std::remove(trm_out_loc.c_str());
-
-        for (auto &tmp_list : temp_file_loc_vector) {
-            for (auto &tmp_file : tmp_list) {
-                std::ofstream final_fasta_out(trm_out_loc, std::ios_base::binary | std::ios_base::app);
-                final_fasta_out.seekp(0, std::ios_base::end);
-
-                std::ifstream tmp_fa(tmp_file, std::ios_base::binary);
-                final_fasta_out << tmp_fa.rdbuf();
-
-                tmp_fa.close();
-                std::remove(tmp_file);
-                delete[] tmp_file;
-            }
-        }
-    }
-
+    final_process_output(total_result_high, total_result_low);
     return 0;
 }

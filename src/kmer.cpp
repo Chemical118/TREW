@@ -36,237 +36,6 @@ static const int codes[256] = {
 #undef G
 #undef T
 
-ptrdiff_t file_extract(FILE *in, off_t offset, unsigned char *buf, size_t len) {
-#ifdef _WIN32
-    int ret = _fseeki64(in, offset, SEEK_SET);
-#else
-    int ret = fseeko(in, offset, SEEK_SET);
-#endif
-    if (ret != 0) {
-        fprintf(stderr, "fseek failed.\n");
-        return -1;
-    }
-
-    // Read 'len' bytes from the file into the buffer 'buf'
-    size_t bytes_read = fread(buf, 1, len, in);
-    if (bytes_read != len) {
-        if (feof(in)) {
-            // End of file reached
-            return bytes_read;  // Return the number of bytes read before EOF
-        } else {
-            // File read error
-            fprintf(stderr, "fread failed.\n");
-            return -1;
-        }
-    }
-
-    // Return the number of bytes successfully read
-    return bytes_read;
-}
-
-// from zran.c
-ptrdiff_t deflate_index_extract(FILE *in, gz_index *index,
-                                off_t offset, unsigned char *buf, size_t len) {
-    if (index == NULL)
-        return file_extract(in, offset, buf, len);
-
-    // Do a quick sanity check on the index.
-    if (index->have < 1 || index->list[0].out != 0 ||
-        index->strm.state == Z_NULL)
-        return Z_STREAM_ERROR;
-
-    // If nothing to extract, return zero bytes extracted.
-    if (len == 0 || offset < 0 || offset >= index->length)
-        return 0;
-
-    // Find the access point closest to but not after offset.
-    int lo = -1, hi = index->have;
-    point_t *point = index->list;
-    while (hi - lo > 1) {
-        int mid = (lo + hi) >> 1;
-        if (offset < point[mid].out)
-            hi = mid;
-        else
-            lo = mid;
-    }
-    point += lo;
-
-    // Initialize the input file and prime the inflate engine to start there.
-#ifdef _WIN32
-  	int ret = _fseeki64(in, point->in - (point->bits ? 1 : 0), SEEK_SET);
-#else
-  	int ret = fseeko(in, point->in - (point->bits ? 1 : 0), SEEK_SET);
-#endif
-    if (ret == -1)
-        return Z_ERRNO;
-    int ch = 0;
-    if (point->bits && (ch = getc(in)) == EOF)
-        return ferror(in) ? Z_ERRNO : Z_BUF_ERROR;
-    index->strm.avail_in = 0;
-    ret = inflateReset2(&index->strm, RAW);
-    if (ret != Z_OK)
-        return ret;
-    if (point->bits)
-        inflatePrime(&index->strm, point->bits, ch >> (8 - point->bits));
-    inflateSetDictionary(&index->strm, point->window, point->dict);
-
-    // Skip uncompressed bytes until offset reached, then satisfy request.
-    unsigned char input[CHUNK];
-    unsigned char discard[WINSIZE];
-    offset -= point->out;       // number of bytes to skip to get to offset
-    size_t left = len;          // number of bytes left to read after offset
-    do {
-        if (offset) {
-            // Discard up to offset uncompressed bytes.
-            index->strm.avail_out = offset < WINSIZE ? (unsigned)offset :
-                                                       WINSIZE;
-            index->strm.next_out = discard;
-        }
-        else {
-            // Uncompress up to left bytes into buf.
-            index->strm.avail_out = left < (unsigned)-1 ? (unsigned)left :
-                                                          (unsigned)-1;
-            index->strm.next_out = buf + len - left;
-        }
-
-        // Uncompress, setting got to the number of bytes uncompressed.
-        if (index->strm.avail_in == 0) {
-            // Assure available input.
-            index->strm.avail_in = fread(input, 1, CHUNK, in);
-            if (index->strm.avail_in < CHUNK && ferror(in)) {
-                ret = Z_ERRNO;
-                break;
-            }
-            index->strm.next_in = input;
-        }
-        unsigned got = index->strm.avail_out;
-        ret = inflate(&index->strm, Z_NO_FLUSH);
-        got -= index->strm.avail_out;
-
-        // Update the appropriate count.
-        if (offset)
-            offset -= got;
-        else {
-            left -= got;
-            if (left == 0)
-                // Request satisfied.
-                break;
-        }
-
-        // If we're at the end of a gzip member and there's more to read,
-        // continue to the next gzip member.
-        if (ret == Z_STREAM_END && index->mode == GZIP) {
-            // Discard the gzip trailer.
-            unsigned drop = 8;              // length of gzip trailer
-            if (index->strm.avail_in >= drop) {
-                index->strm.avail_in -= drop;
-                index->strm.next_in += drop;
-            }
-            else {
-                // Read and discard the remainder of the gzip trailer.
-                drop -= index->strm.avail_in;
-                index->strm.avail_in = 0;
-                do {
-                    if (getc(in) == EOF)
-                        // The input does not have a complete trailer.
-                        return ferror(in) ? Z_ERRNO : Z_BUF_ERROR;
-                } while (--drop);
-            }
-
-            if (index->strm.avail_in || ungetc(getc(in), in) != EOF) {
-                // There's more after the gzip trailer. Use inflate to skip the
-                // gzip header and resume the raw inflate there.
-                inflateReset2(&index->strm, GZIP);
-                do {
-                    if (index->strm.avail_in == 0) {
-                        index->strm.avail_in = fread(input, 1, CHUNK, in);
-                        if (index->strm.avail_in < CHUNK && ferror(in)) {
-                            ret = Z_ERRNO;
-                            break;
-                        }
-                        index->strm.next_in = input;
-                    }
-                    index->strm.avail_out = WINSIZE;
-                    index->strm.next_out = discard;
-                    ret = inflate(&index->strm, Z_BLOCK);  // stop after header
-                } while (ret == Z_OK && (index->strm.data_type & 0x80) == 0);
-                if (ret != Z_OK)
-                    break;
-                inflateReset2(&index->strm, RAW);
-            }
-        }
-
-        // Continue until we have the requested data, the deflate data has
-        // ended, or an error is encountered.
-    } while (ret == Z_OK);
-
-    // Return the number of uncompressed bytes read into buf, or the error.
-    return ret == Z_OK || ret == Z_STREAM_END ? len - left : ret;
-}
-
-// Add an access point to the list. If out of memory, deallocate the existing
-// list and return NULL. index->mode is temporarily the allocated number of
-// access points, until it is time for deflate_index_build() to return. Then
-// index->mode is set to the mode of inflation.
-static gz_index *add_point(gz_index *index, off_t in,
-                                       off_t out, off_t beg,
-                                       unsigned char *buffer,
-                                       unsigned char *bef_buffer,
-                                       int buffer_size,
-                                       int bef_buffer_size) {
-    if (index->have == index->mode) {
-        // The list is full. Make it bigger.
-        index->mode = index->mode ? index->mode << 1 : 8;
-        point_t *next = (point_t *) realloc(index->list, sizeof(point_t) * index->mode);
-        if (next == NULL) {
-            deflate_index_free(index);
-            return NULL;
-        }
-        index->list = next;
-    }
-
-    // Fill in the access point and increment how many we have.
-    point_t *next = (point_t *)(index->list) + index->have++;
-    if (index->have < 0) {
-        // Overflowed the int!
-        deflate_index_free(index);
-        return NULL;
-    }
-    next->out = out;
-    next->in = in;
-    next->bits = index->strm.data_type & 7;
-    // next->dict always small then WINSIZE
-    next->dict = out - beg > WINSIZE ? WINSIZE : (unsigned)(out - beg);
-    next->window = (unsigned char*) malloc(next->dict);
-    if (next->window == NULL) {
-        deflate_index_free(index);
-        return NULL;
-    }
-    unsigned recent = buffer_size - index->strm.avail_out;
-
-    // enough recent check
-    unsigned copy = recent > next->dict ? next->dict : recent;
-
-    // copy nearby winsize
-    memcpy(next->window + next->dict - copy, buffer + recent - copy, copy);
-    copy = next->dict - copy;
-    memcpy(next->window, bef_buffer + bef_buffer_size - copy, copy);
-
-    // Return the index, which may have been newly allocated or destroyed.
-    return index;
-}
-
-void deflate_index_free(gz_index *index) {
-    if (index != NULL) {
-        size_t i = index->have;
-        while (i)
-            free(index->list[--i].window);
-        free(index->list);
-        inflateEnd(&index->strm);
-        free(index);
-    }
-}
-
 uint32_t reverse_complement_32(uint32_t x) {
     x = (x >> 16) | (x << 16);
     x = ((x >> 8) & 0x00ff00ff) | ((x & 0x00ff00ff) << 8);
@@ -308,7 +77,7 @@ FinalData<int64_t> add_data(FinalData<int64_t> a, FinalData<int64_t> b) {
     return FinalData<int64_t> {a.forward + b.forward, a.backward + b.backward, a.both + b.both};
 }
 
-ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table, const int read_type) {
+ResultMapData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table) {
     auto [k_mer_counter, k_mer_data, k_mer_data_128, k_mer_counter_list] = thread_data -> init_check();
 
     int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
@@ -318,7 +87,6 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
     }
 
     ResultMapData result = ResultMapData {{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}};
-    std::vector<FastqLocData>* loc_vector = new std::vector<FastqLocData> {};
 
     ResultMapPair temp_result_left = {new ResultMap {}, new ResultMap {}};
     ResultMapPair temp_result_right = {new ResultMap {}, new ResultMap {}};
@@ -340,7 +108,6 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
             if (temp_task.loc_vector == nullptr) {
                 break;
             }
-            int64_t cnt = 0;
             for (auto& [st, nd]: *(temp_task.loc_vector)) {
                 std::pair<uint64_t, uint64_t> lef_seq, rht_seq;
                 n = nd - st + 1;
@@ -402,11 +169,6 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                         k_mer_check(temp_task.buffer, st, nd, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
                                     k_mer_data, k_mer_counter_list, repeat_check_table, {high_half_check ? result.both.first : nullptr, low_half_check ? result.both.second : nullptr}, k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER));
                     }
-
-                    if (INDEX and left_temp_k_mer.first != right_temp_k_mer.first or left_temp_k_mer.second != right_temp_k_mer.second) {
-                        loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + st, n}, right_temp_k_mer, left_temp_k_mer, temp_task.fq_cnt - cnt, rht_seq, lef_seq);
-                    }
-                    cnt++;
                 }
             }
 
@@ -423,7 +185,6 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
             if (temp_task.loc_vector == nullptr) {
                 break;
             }
-            int64_t cnt = 0;
             for (auto& [st, nd]: *(temp_task.loc_vector)) {
                 std::pair<uint128_t, uint128_t> lef_seq, rht_seq;
                 n = nd - st + 1;
@@ -485,11 +246,6 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
                         k_mer_check_128(temp_task.buffer, st, nd, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
                                         k_mer_data_128, k_mer_counter_list, repeat_check_table, {high_half_check ? result.both.first : nullptr, low_half_check ? result.both.second : nullptr}, k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER));
                     }
-
-                    if (INDEX and left_temp_k_mer.first != right_temp_k_mer.first or left_temp_k_mer.second != right_temp_k_mer.second) {
-                        loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + st, n}, right_temp_k_mer, left_temp_k_mer, temp_task.fq_cnt - cnt, rht_seq, lef_seq);
-                    }
-                    cnt++;
                 }
             }
 
@@ -506,10 +262,10 @@ ResultMapPairData buffer_task(TBBQueue* task_queue, ThreadData* thread_data, uin
     delete temp_result_right.second;
 
     free(k_mer_total_cnt);
-    return {result, loc_vector};
+    return result;
 }
 
-ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table) {
+ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table) {
     auto [k_mer_counter, k_mer_data, k_mer_data_128, k_mer_counter_list] = thread_data -> init_check();
 
     int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
@@ -519,14 +275,486 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
     }
 
     ResultMapData result = ResultMapData {{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}};
-    std::vector<FastqLocData>* loc_vector = new std::vector<FastqLocData> {};
 
     ResultMapPair temp_result_left = {new ResultMap {}, new ResultMap {}};
     ResultMapPair temp_result_right = {new ResultMap {}, new ResultMap {}};
 
-    QueueData temp_task {};
+    PairQueueData temp_task {};
+
+    int snum;
+
+    int n, n1, n2;
+    int st1, nd1, st2, nd2;
+
+    KmerData left_temp_k_mer, right_temp_k_mer;
+    int ti, tj;
 
     KmerData k_mer, temp_k_mer, lef_k_mer;
+    KmerData si, sj;
+    std::pair<bool, bool> repeat_end;
+
+    uint128_t seq_rev;
+
+    if (MAX_MER <= ABS_UINT64_MAX_MER) {
+        CounterMap* k_mer_counter_map = nullptr;
+        std::pair<uint64_t, uint64_t> k_mer_seq, temp_k_mer_seq;
+        std::pair<uint64_t, uint64_t> lef_seq, rht_seq;
+
+        if (TABLE_MAX_MER < MAX_MER) {
+            k_mer_counter_map = new CounterMap[MAX_MER - TABLE_MAX_MER];
+        }
+
+        auto get_dir_seq = [](int i, int k, uint64_t seq, bool is_for) {
+            if (i <= 2 == is_for) {
+                return seq;
+            } else {
+                return get_rot_seq(reverse_complement_64(seq) >> (2 * (32 - k)), k);
+            }
+        };
+
+        while (1) {
+            task_queue -> pop(temp_task);
+            if (temp_task.loc_vector1 == nullptr) {
+                break;
+            }
+
+            size_t min_size = std::min(temp_task.loc_vector1 -> size(), temp_task.loc_vector2 -> size());
+            for (size_t i = 0; i < min_size; i++) {
+                st1 = (*temp_task.loc_vector1)[i].first;
+                nd1 = (*temp_task.loc_vector1)[i].second;
+                n1 = nd1 - st1 + 1;
+
+                st2 = (*temp_task.loc_vector2)[i].first;
+                nd2 = (*temp_task.loc_vector2)[i].second;
+                n2 = nd2 - st2 + 1;
+
+                n = MIN(n1, n2);
+
+                if (2 * MIN_MER <= n) {
+                    lef_k_mer = {0, 0};
+                    k_mer = {0, 0};
+
+                    if (4 * MIN_MER <= n) {
+                        std::vector<const char*> buffer_vector= {temp_task.buffer1, temp_task.buffer1, temp_task.buffer2, temp_task.buffer2};
+                        std::vector<std::pair<int, int>> index_vector= {{st1, st1 + (n1 / 2) - 1}, {nd1 - ((n1 + 1) / 2) + 1, nd1},
+                                                                        {nd2 - ((n2 + 1) / 2) + 1, nd2}, {st2, st2 + (n2 / 2) - 1}};
+
+                        snum = 4;
+                        si = {1, 1};
+                        k_mer = {0, 0};
+
+                        for (ti = 1; ti <= snum && (!repeat_end.first || !repeat_end.second) ; ti++) {
+                            temp_k_mer = k_mer_check(buffer_vector[ti - 1], index_vector[ti - 1].first, index_vector[ti - 1].second, rot_table, extract_k_mer, k_mer_counter,
+                                                         k_mer_counter_map, k_mer_data, k_mer_counter_list, repeat_check_table,
+                                                         {repeat_end.first ? nullptr : (ti <= 2 ? temp_result_left.first : temp_result_right.first),
+                                                                     repeat_end.second ? nullptr : (ti <= 2 ? temp_result_left.second : temp_result_right.second)},
+                                                                     k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &temp_k_mer_seq);
+
+                            if (!repeat_end.first && temp_k_mer.first > 0 && ((k_mer.first == temp_k_mer.first and k_mer_seq.first == get_dir_seq(ti, temp_k_mer.first, temp_k_mer_seq.first, true)) || ti == 1)) {
+                                si.first += 1;
+                                k_mer.first = temp_k_mer.first;
+                                if (ti == 1) {
+                                    k_mer_seq.first = temp_k_mer_seq.first;
+                                }
+                                repeat_end.first = false;
+                            } else {
+                                repeat_end.first = true;
+                            }
+                            if (!repeat_end.second && temp_k_mer.second > 0 && ((k_mer.second == temp_k_mer.second and k_mer_seq.second == get_dir_seq(ti, temp_k_mer.second, temp_k_mer_seq.second, true)) || ti == 1)) {
+                                si.second += 1;
+                                k_mer.second = temp_k_mer.second;
+                                if (ti == 1) {
+                                    k_mer_seq.second = temp_k_mer_seq.second;
+                                }
+                                repeat_end.second = false;
+                            } else {
+                                repeat_end.second = true;
+                            }
+                        }
+                        lef_k_mer = k_mer;
+
+                        if (si.first == snum + 1) {
+                            for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.first))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.first)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.first))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+                        if (si.second == snum + 1) {
+                            for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.second)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+
+                        if (si.first <= snum or si.second <= snum) {
+                            sj = {snum, snum};
+                            k_mer = {0, 0};
+                            repeat_end = {false, false};
+                            for (tj = snum; !repeat_end.first || !repeat_end.second; tj--) {
+                                temp_k_mer = k_mer_check(buffer_vector[tj - 1], index_vector[tj - 1].first, index_vector[tj - 1].second, rot_table, extract_k_mer, k_mer_counter,
+                                                             k_mer_counter_map, k_mer_data, k_mer_counter_list, repeat_check_table,
+                                                {repeat_end.first ? nullptr : (tj <= 2 ? temp_result_right.first : temp_result_left.first),
+                                                            repeat_end.second ? nullptr : (tj <= 2 ? temp_result_right.second : temp_result_left.second)},
+                                                            k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &temp_k_mer_seq);
+
+                                if (sj.first >= si.first && !repeat_end.first && temp_k_mer.first > 0 && ((k_mer.first == temp_k_mer.first and
+                                    k_mer_seq.first == get_dir_seq(tj, temp_k_mer.first, temp_k_mer_seq.first, false)) || tj == snum)) {
+                                    sj.first -= 1;
+                                    k_mer.first = temp_k_mer.first;
+                                    if (tj == snum) {
+                                        k_mer_seq.first = temp_k_mer_seq.first;
+                                    }
+                                    repeat_end.first = false;
+                                } else {
+                                    repeat_end.first = true;
+                                }
+                                if (sj.second >= si.second && !repeat_end.second && temp_k_mer.second > 0 && ((k_mer.second == temp_k_mer.second and
+                                    k_mer_seq.second == get_dir_seq(tj, temp_k_mer.second, temp_k_mer_seq.second, false)) || tj == snum)) {
+                                    sj.second -= 1;
+                                    k_mer.second = temp_k_mer.second;
+                                    if (tj == snum) {
+                                        k_mer_seq.second = temp_k_mer_seq.second;
+                                    }
+                                    repeat_end.second = false;
+                                } else {
+                                    repeat_end.second = true;
+                                }
+                            }
+                        }
+
+                        if (si.first <= snum) {
+                            for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                                (*(result.forward.first))[seq] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.first)) {
+                                (*(result.backward.first))[seq] += cnt;
+                            }
+                        }
+                        if (si.second <= snum) {
+                            for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                                (*(result.forward.second))[seq] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.second)) {
+                                (*(result.backward.second))[seq] += cnt;
+                            }
+                        }
+
+                        temp_result_left.first -> clear();
+                        temp_result_left.second -> clear();
+
+                        temp_result_right.first -> clear();
+                        temp_result_right.second -> clear();
+                    }
+
+                    left_temp_k_mer = {0, 0};
+                    right_temp_k_mer = {0, 0};
+
+                    if (4 * MAX_MER > n) {
+                        if (lef_k_mer.first == 0 or lef_k_mer.second == 0) {
+                            left_temp_k_mer = k_mer_check(temp_task.buffer1, st1, nd1, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                          k_mer_data, k_mer_counter_list, repeat_check_table,
+                                                          {lef_k_mer.first == 0 ? temp_result_left.first : nullptr,
+                                                          lef_k_mer.second == 0 ? temp_result_left.second : nullptr},
+                                                          k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER), &lef_seq);
+                        }
+                        if (k_mer.first == 0 or k_mer.second == 0) {
+                            right_temp_k_mer = k_mer_check(temp_task.buffer2, st2, nd2, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
+                                                        k_mer_data, k_mer_counter_list, repeat_check_table,
+                                                        {k_mer.first == 0 ? temp_result_left.first : nullptr,
+                                                        k_mer.second == 0 ? temp_result_left.second : nullptr},
+                                                        k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER), &rht_seq);
+
+                        }
+
+                        if (lef_k_mer.first == 0 and k_mer.first == 0 and left_temp_k_mer.first == right_temp_k_mer.first
+                            and left_temp_k_mer.first > 0 and lef_seq.first == get_rot_seq(reverse_complement_64(rht_seq.first) >> (2 * (32 - right_temp_k_mer.first)), right_temp_k_mer.first)) {
+                            for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.first))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+                        if (lef_k_mer.second == 0 and k_mer.second == 0 and left_temp_k_mer.second == right_temp_k_mer.second
+                            and left_temp_k_mer.second > 0 and lef_seq.second == get_rot_seq(reverse_complement_64(rht_seq.second) >> (2 * (32 - right_temp_k_mer.second)), right_temp_k_mer.second)) {
+                            for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+
+                        for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                            (*(result.forward.first))[seq] += cnt;
+                        }
+                        for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                            (*(result.forward.second))[seq] += cnt;
+                        }
+                    }
+                }
+            }
+
+            delete temp_task.loc_vector1;
+            free(temp_task.buffer1);
+
+            delete temp_task.loc_vector2;
+            free(temp_task.buffer2);
+        }
+
+        delete[] k_mer_counter_map;
+    } else {
+        CounterMap_128* k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
+        std::pair<uint128_t, uint128_t> k_mer_seq, temp_k_mer_seq;
+        std::pair<uint128_t, uint128_t> lef_seq, rht_seq;
+
+        auto get_dir_seq = [](int i, int k, uint128_t seq, bool is_for) {
+            if (i <= 2 == is_for) {
+                return seq;
+            } else {
+                return get_rot_seq_128(reverse_complement_128(seq) >> (2 * (64 - k)), k);
+            }
+        };
+
+        while (1) {
+            task_queue -> pop(temp_task);
+            if (temp_task.loc_vector1 == nullptr) {
+                break;
+            }
+
+            size_t min_size = std::min(temp_task.loc_vector1 -> size(), temp_task.loc_vector2 -> size());
+            for (size_t i = 0; i < min_size; i++) {
+                st1 = (*temp_task.loc_vector1)[i].first;
+                nd1 = (*temp_task.loc_vector1)[i].second;
+                n1 = nd1 - st1 + 1;
+
+                st2 = (*temp_task.loc_vector2)[i].first;
+                nd2 = (*temp_task.loc_vector2)[i].second;
+                n2 = nd2 - st2 + 1;
+
+                n = MIN(n1, n2);
+
+                if (2 * MIN_MER <= n) {
+                    lef_k_mer = {0, 0};
+                    k_mer = {0, 0};
+
+                    if (4 * MIN_MER <= n) {
+                        std::vector<const char*> buffer_vector= {temp_task.buffer1, temp_task.buffer1, temp_task.buffer2, temp_task.buffer2};
+                        std::vector<std::pair<int, int>> index_vector= {{st1, st1 + (n1 / 2) - 1}, {nd1 - ((n1 + 1) / 2) + 1, nd1},
+                                                                        {nd2 - ((n2 + 1) / 2) + 1, nd2}, {st2, st2 + (n2 / 2) - 1}};
+
+                        snum = 4;
+                        si = {1, 1};
+                        k_mer = {0, 0};
+
+                        for (ti = 1; ti <= snum && (!repeat_end.first || !repeat_end.second) ; ti++) {
+                            temp_k_mer = k_mer_check_128(buffer_vector[ti - 1], index_vector[ti - 1].first, index_vector[ti - 1].second, rot_table, extract_k_mer_128, k_mer_counter,
+                                                         k_mer_counter_map, k_mer_data_128, k_mer_counter_list, repeat_check_table,
+                                                         {repeat_end.first ? nullptr : (ti <= 2 ? temp_result_left.first : temp_result_right.first),
+                                                                     repeat_end.second ? nullptr : (ti <= 2 ? temp_result_left.second : temp_result_right.second)},
+                                                                     k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &temp_k_mer_seq);
+
+                            if (!repeat_end.first && temp_k_mer.first > 0 && ((k_mer.first == temp_k_mer.first and k_mer_seq.first == get_dir_seq(ti, temp_k_mer.first, temp_k_mer_seq.first, true)) || ti == 1)) {
+                                si.first += 1;
+                                k_mer.first = temp_k_mer.first;
+                                if (ti == 1) {
+                                    k_mer_seq.first = temp_k_mer_seq.first;
+                                }
+                                repeat_end.first = false;
+                            } else {
+                                repeat_end.first = true;
+                            }
+                            if (!repeat_end.second && temp_k_mer.second > 0 && ((k_mer.second == temp_k_mer.second and k_mer_seq.second == get_dir_seq(ti, temp_k_mer.second, temp_k_mer_seq.second, true)) || ti == 1)) {
+                                si.second += 1;
+                                k_mer.second = temp_k_mer.second;
+                                if (ti == 1) {
+                                    k_mer_seq.second = temp_k_mer_seq.second;
+                                }
+                                repeat_end.second = false;
+                            } else {
+                                repeat_end.second = true;
+                            }
+                        }
+                        lef_k_mer = k_mer;
+
+                        if (si.first == snum + 1) {
+                            for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.first))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.first)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.first))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+                        if (si.second == snum + 1) {
+                            for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.second)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+
+                        if (si.first <= snum or si.second <= snum) {
+                            sj = {snum, snum};
+                            k_mer = {0, 0};
+                            repeat_end = {false, false};
+                            for (tj = snum; !repeat_end.first || !repeat_end.second; tj--) {
+                                temp_k_mer = k_mer_check_128(buffer_vector[tj - 1], index_vector[tj - 1].first, index_vector[tj - 1].second, rot_table, extract_k_mer_128, k_mer_counter,
+                                                             k_mer_counter_map, k_mer_data_128, k_mer_counter_list, repeat_check_table,
+                                                {repeat_end.first ? nullptr : (tj <= 2 ? temp_result_right.first : temp_result_left.first),
+                                                            repeat_end.second ? nullptr : (tj <= 2 ? temp_result_right.second : temp_result_left.second)},
+                                                            k_mer_total_cnt, MIN_MER, MIN(n / 4, MAX_MER), &temp_k_mer_seq);
+
+                                if (sj.first >= si.first && !repeat_end.first && temp_k_mer.first > 0 && ((k_mer.first == temp_k_mer.first and
+                                    k_mer_seq.first == get_dir_seq(tj, temp_k_mer.first, temp_k_mer_seq.first, false)) || tj == snum)) {
+                                    sj.first -= 1;
+                                    k_mer.first = temp_k_mer.first;
+                                    if (tj == snum) {
+                                        k_mer_seq.first = temp_k_mer_seq.first;
+                                    }
+                                    repeat_end.first = false;
+                                } else {
+                                    repeat_end.first = true;
+                                }
+                                if (sj.second >= si.second && !repeat_end.second && temp_k_mer.second > 0 && ((k_mer.second == temp_k_mer.second and
+                                    k_mer_seq.second == get_dir_seq(tj, temp_k_mer.second, temp_k_mer_seq.second, false)) || tj == snum)) {
+                                    sj.second -= 1;
+                                    k_mer.second = temp_k_mer.second;
+                                    if (tj == snum) {
+                                        k_mer_seq.second = temp_k_mer_seq.second;
+                                    }
+                                    repeat_end.second = false;
+                                } else {
+                                    repeat_end.second = true;
+                                }
+                            }
+                        }
+
+                        if (si.first <= snum) {
+                            for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                                (*(result.forward.first))[seq] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.first)) {
+                                (*(result.backward.first))[seq] += cnt;
+                            }
+                        }
+                        if (si.second <= snum) {
+                            for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                                (*(result.forward.second))[seq] += cnt;
+                            }
+
+                            for (auto& [seq, cnt] : *(temp_result_right.second)) {
+                                (*(result.backward.second))[seq] += cnt;
+                            }
+                        }
+
+                        temp_result_left.first -> clear();
+                        temp_result_left.second -> clear();
+
+                        temp_result_right.first -> clear();
+                        temp_result_right.second -> clear();
+                    }
+
+                    left_temp_k_mer = {0, 0};
+                    right_temp_k_mer = {0, 0};
+
+                    if (4 * MAX_MER > n and (lef_k_mer.first == 0 or lef_k_mer.second == 0 or k_mer.first == 0 or k_mer.second == 0)) {
+                        if (lef_k_mer.first == 0 or lef_k_mer.second == 0) {
+                            left_temp_k_mer = k_mer_check_128(temp_task.buffer1, st1, nd1, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
+                                                          k_mer_data_128, k_mer_counter_list, repeat_check_table,
+                                                          {lef_k_mer.first == 0 ? temp_result_left.first : nullptr,
+                                                          lef_k_mer.second == 0 ? temp_result_left.second : nullptr},
+                                                          k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER), &lef_seq);
+                        }
+
+                        if (k_mer.first == 0 or k_mer.second == 0) {
+                            right_temp_k_mer = k_mer_check_128(temp_task.buffer2, st2, nd2, rot_table, extract_k_mer_128, k_mer_counter, k_mer_counter_map,
+                                                        k_mer_data_128, k_mer_counter_list, repeat_check_table,
+                                                        {k_mer.first == 0 ? temp_result_left.first : nullptr,
+                                                        k_mer.second == 0 ? temp_result_left.second : nullptr},
+                                                        k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER), &rht_seq);
+
+                        }
+
+                        if (lef_k_mer.first == 0 and k_mer.first == 0 and left_temp_k_mer.first == right_temp_k_mer.first
+                            and left_temp_k_mer.first > 0 and lef_seq.first == get_rot_seq_128(reverse_complement_128(rht_seq.first) >> (2 * (64 - right_temp_k_mer.first)), right_temp_k_mer.first)) {
+                            for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.first))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+
+                        if (lef_k_mer.second == 0 and k_mer.second == 0 and left_temp_k_mer.second == right_temp_k_mer.second
+                            and left_temp_k_mer.second > 0 and lef_seq.second == get_rot_seq_128(reverse_complement_128(rht_seq.second) >> (2 * (64 - right_temp_k_mer.second)), right_temp_k_mer.second)) {
+                            for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                                seq_rev = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
+                                (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
+                            }
+                        }
+
+                        for (auto& [seq, cnt] : *(temp_result_left.first)) {
+                            (*(result.forward.first))[seq] += cnt;
+                        }
+                        for (auto& [seq, cnt] : *(temp_result_left.second)) {
+                            (*(result.forward.second))[seq] += cnt;
+                        }
+
+                        temp_result_left.first -> clear();
+                        temp_result_left.second -> clear();
+                    }
+                }
+            }
+
+            delete temp_task.loc_vector1;
+            free(temp_task.buffer1);
+
+            delete temp_task.loc_vector2;
+            free(temp_task.buffer2);
+        }
+
+        delete[] k_mer_counter_map;
+    }
+
+    delete temp_result_left.first;
+    delete temp_result_left.second;
+    delete temp_result_right.first;
+    delete temp_result_right.second;
+
+    free(k_mer_total_cnt);
+    return result;
+}
+
+ResultMapData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data, uint32_t** rot_table, const uint64_t *extract_k_mer, const uint128_t *extract_k_mer_128, uint8_t** repeat_check_table) {
+    auto [k_mer_counter, k_mer_data, k_mer_data_128, k_mer_counter_list] = thread_data -> init_check();
+
+    int16_t* k_mer_total_cnt = (int16_t*) malloc(sizeof(int16_t) * (MAX_MER - MIN_MER + 2));
+    if (k_mer_total_cnt == nullptr) {
+        fprintf(stderr, "memory allocation failure\n");
+        exit(EXIT_FAILURE);
+    }
+
+    ResultMapData result = ResultMapData {{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}};
+
+    ResultMapPair temp_result_left = {new ResultMap {}, new ResultMap {}};
+
+    QueueData temp_task {};
+
+    KmerData k_mer, temp_k_mer;
     int tst, tnd, ti, tj;
     KmerData si, sj;
 
@@ -595,10 +823,7 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                         (*(result.both.second))[KmerSeq {seq.first, MIN(seq.second, seq_rev)}] += cnt;
                     }
                 }
-                temp_result_left.first -> clear();
-                temp_result_left.second -> clear();
 
-                lef_k_mer = k_mer;
                 if (si.first <= snum or si.second <= snum) {
                     sj = {snum, snum};
                     k_mer = {0, 0};
@@ -607,7 +832,7 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                         sl = SLICE_LENGTH + (tj == mid ? mid_bonus_sl : 0);
                         temp_k_mer = k_mer_check(temp_task.buffer, tnd - sl + 1, tnd, rot_table, extract_k_mer, k_mer_counter,
                                                      k_mer_counter_map, k_mer_data, k_mer_counter_list, repeat_check_table,
-                                                     {repeat_end.first ? nullptr : temp_result_right.first, repeat_end.second ? nullptr : temp_result_right.second}, k_mer_total_cnt, MIN_MER, MAX_MER);
+                                                     {repeat_end.first ? nullptr : result.backward.first, repeat_end.second ? nullptr : result.backward.second}, k_mer_total_cnt, MIN_MER, MAX_MER);
 
                         if (sj.first >= si.first && !repeat_end.first && temp_k_mer.first > 0 && (k_mer.first == temp_k_mer.first || tj == snum)) {
                             sj.first -= 1;
@@ -625,59 +850,19 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                         }
                     }
 
-                    uint32_t max_cnt = 0;
                     if (si.first <= snum) {
-                        max_cnt = 0;
-                        lef_seq.first = 0;
                         for (auto& [seq, cnt] : *(temp_result_left.first)) {
-                            if (cnt > max_cnt) {
-                                lef_seq.first = seq.second;
-                                max_cnt = cnt;
-                            }
                             (*(result.forward.first))[seq] += cnt;
                         }
                     }
                     if (si.second <= snum) {
-                        max_cnt = 0;
-                        lef_seq.second = 0;
                         for (auto& [seq, cnt] : *(temp_result_left.second)) {
-                            if (cnt > max_cnt) {
-                                lef_seq.second = seq.second;
-                                max_cnt = cnt;
-                            }
                             (*(result.forward.second))[seq] += cnt;
                         }
                     }
-
-                    max_cnt = 0;
-                    rht_seq.first = 0;
-                    for (auto& [seq, cnt] : *(temp_result_right.first)) {
-                        if (cnt > max_cnt) {
-                            rht_seq.first = seq.second;
-                            max_cnt = cnt;
-                        }
-                        (*(result.backward.first))[seq] += cnt;
-                    }
-
-                    max_cnt = 0;
-                    rht_seq.second = 0;
-                    for (auto& [seq, cnt] : *(temp_result_right.second)) {
-                        if (cnt > max_cnt) {
-                            rht_seq.second = seq.second;
-                            max_cnt = cnt;
-                        }
-                        (*(result.backward.second))[seq] += cnt;
-                    }
-
-                    temp_result_right.first -> clear();
-                    temp_result_right.second -> clear();
                 }
                 temp_result_left.first -> clear();
                 temp_result_left.second -> clear();
-
-                if (INDEX and (si.first <= snum or si.second <= snum) and (k_mer.first != 0 or k_mer.second != 0 or lef_k_mer.first != 0 or lef_k_mer.second != 0)) {
-                    loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + (int64_t) st, nd - st + 1}, k_mer, lef_k_mer, 0, rht_seq, lef_seq);
-                }
             }
 
             delete temp_task.loc_vector;
@@ -748,7 +933,7 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                         sl = SLICE_LENGTH + (tj == mid ? mid_bonus_sl : 0);
                         temp_k_mer = k_mer_check_128(temp_task.buffer, tnd - sl + 1, tnd, rot_table, extract_k_mer_128, k_mer_counter,
                                                      k_mer_counter_map, k_mer_data_128, k_mer_counter_list, repeat_check_table,
-                                                     {repeat_end.first ? nullptr : temp_result_right.first, repeat_end.second ? nullptr : temp_result_right.second}, k_mer_total_cnt, MIN_MER, MAX_MER, &rht_seq);
+                                                     {repeat_end.first ? nullptr : result.backward.first, repeat_end.second ? nullptr : result.backward.second}, k_mer_total_cnt, MIN_MER, MAX_MER, &rht_seq);
 
                         if (sj.first >= si.first && !repeat_end.first && temp_k_mer.first > 0 && (k_mer.first == temp_k_mer.first || tj == snum)) {
                             sj.first -= 1;
@@ -766,59 +951,19 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
                         }
                     }
 
-                    uint32_t max_cnt = 0;
                     if (si.first <= snum) {
-                        max_cnt = 0;
-                        lef_seq.first = 0;
                         for (auto& [seq, cnt] : *(temp_result_left.first)) {
-                            if (cnt > max_cnt) {
-                                lef_seq.first = seq.second;
-                                max_cnt = cnt;
-                            }
                             (*(result.forward.first))[seq] += cnt;
                         }
                     }
                     if (si.second <= snum) {
-                        max_cnt = 0;
-                        lef_seq.second = 0;
                         for (auto& [seq, cnt] : *(temp_result_left.second)) {
-                            if (cnt > max_cnt) {
-                                lef_seq.second = seq.second;
-                                max_cnt = cnt;
-                            }
                             (*(result.forward.second))[seq] += cnt;
                         }
                     }
-
-                    max_cnt = 0;
-                    rht_seq.first = 0;
-                    for (auto& [seq, cnt] : *(temp_result_right.first)) {
-                        if (cnt > max_cnt) {
-                            rht_seq.first = seq.second;
-                            max_cnt = cnt;
-                        }
-                        (*(result.backward.first))[seq] += cnt;
-                    }
-
-                    max_cnt = 0;
-                    rht_seq.second = 0;
-                    for (auto& [seq, cnt] : *(temp_result_right.second)) {
-                        if (cnt > max_cnt) {
-                            rht_seq.second = seq.second;
-                            max_cnt = cnt;
-                        }
-                        (*(result.backward.second))[seq] += cnt;
-                    }
-
-                    temp_result_right.first -> clear();
-                    temp_result_right.second -> clear();
                 }
                 temp_result_left.first -> clear();
                 temp_result_left.second -> clear();
-
-                if (INDEX and (si.first != snum + 1 or si.second == snum + 1) and (k_mer.first != 0 or k_mer.second != 0 or lef_k_mer.first != 0 or lef_k_mer.second != 0)) {
-                    loc_vector -> emplace_back(std::pair<int64_t, int64_t> {temp_task.buf_off + (int64_t) st, nd - st + 1}, k_mer, lef_k_mer, 0, rht_seq, lef_seq);
-                }
             }
 
             delete temp_task.loc_vector;
@@ -831,600 +976,290 @@ ResultMapPairData buffer_task_long(TBBQueue* task_queue, ThreadData* thread_data
     delete temp_result_left.first;
     delete temp_result_left.second;
     free(k_mer_total_cnt);
-    return {result, loc_vector};
+    return result;
 }
 
-void read_fastq_thread(FILE* fp, TBBQueue* buffer_task_queue) {
+void read_fastq_thread(FileReader& file_reader, TBBQueue* buffer_task_queue) {
     int num = 0;
     int shift = 0;
-    int bef_shift;
-    int idx;
+    int bytes_read;
+    int idx = -1;
+    char* buffer;
+    char* buffer_new;
 
-    off_t totout = 0;
-    off_t bytes_read;
-    off_t avail_out = 0;
+    buffer = (char*) malloc(sizeof(char) * LENGTH);
+    while (1) {
+        LocationVector* loc_vector = new LocationVector{};
 
-    int64_t fq_cnt = 0;
+        bytes_read = file_reader.read(buffer + shift, LENGTH - 1 - shift);
+        buffer[bytes_read + shift] = '\0';
 
-    unsigned char* buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + 1));
-    unsigned char* bef_buffer;
-    unsigned char* next_out = buffer;
-
-    int buffer_size = LENGTH;
-    QueueData bef_queue_data = {nullptr, nullptr, -1};
-
-    while (!feof(fp)) {
-        if (avail_out == 0) {
-            avail_out = LENGTH;
-            next_out = buffer + shift + buffer_size - LENGTH;
-        }
-
-        bytes_read = fread(next_out, 1, avail_out, fp);
-        totout += bytes_read;
-        avail_out -= bytes_read;
-
-        if ((avail_out == 0 and totout > 0) or feof(fp)) {
-            int seq_cnt = 0;
-            int bef_num = num;
-
-            LocationVector* loc_vector = new LocationVector{};
-
-            buffer[LENGTH - avail_out + shift] = '\0';
-            for (int i = 0; i < LENGTH - avail_out + shift; i++) {
-                if (buffer[i] == '\n') {
-                    num += 1;
-                    if ((num & 3) == 2) {
-                        if ((i - 1) - (idx + 1) + 1 > MAX_SEQ) {
-                            fprintf(stderr, "This mode is designed for short-read sequencing. Please use 'trew long'.\n");
-                            exit (EXIT_FAILURE);
-                        }
-                        seq_cnt += 1;
-                        fq_cnt += 1;
-                        loc_vector -> emplace_back(idx + 1, i - 1);
+        for (int i = 0; i < bytes_read + shift; i++) {
+            if (buffer[i] == '\n') {
+                num += 1;
+                if ((num & 3) == 2) {
+                    if ((i - 1) - (idx + 1) + 1 > MAX_SEQ) {
+                        fprintf(stderr, "This mode is designed for short-read sequencing. Please use 'trew long'.\n");
+                        exit(EXIT_FAILURE);
                     }
-                    idx = i;
+                    loc_vector->emplace_back(idx + 1, i - 1);
                 }
-            }
-
-            if ((num & 3) == 1 and bef_num == num and seq_cnt == 0) {
-                delete loc_vector;
-
-                buffer_size += LENGTH;
-                buffer = (unsigned char*) realloc(buffer, buffer_size + LENGTH + 1);
-            } else {
-                bef_shift = shift;
-                if ((num & 3) == 1) {
-                    shift = LENGTH - avail_out + shift - idx - 1;
-                }
-                else {
-                    shift = 0;
-                }
-
-                bef_buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + shift + 1));
-                if ((num & 3) == 1) {
-                    strcpy(reinterpret_cast<char*>(bef_buffer), reinterpret_cast<char*>(buffer + idx + 1));
-                    idx = -1;
-                }
-
-                if (bef_queue_data.buffer != nullptr) {
-                    buffer_task_queue -> push(bef_queue_data);
-                }
-
-                bef_queue_data = QueueData{reinterpret_cast<char*>(buffer), loc_vector,
-                                (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) avail_out, fq_cnt};
-
-
-                std::swap(bef_buffer, buffer);
-                buffer_size = LENGTH;
+                idx = i;
             }
         }
-    }
 
-    if (bef_queue_data.buffer != NULL) {
-        buffer_task_queue -> push(bef_queue_data);
+        if (bytes_read <= 0) {
+            buffer_task_queue->push(QueueData{buffer, loc_vector});
+            if (file_reader.eof()) {
+                break;
+            } else {
+                fprintf(stderr, "File-IO Error: %s.\n", file_reader.error());
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            buffer_new = (char*) malloc(sizeof(char) * LENGTH);
+            if ((num & 3) == 1) {
+                strcpy(buffer_new, buffer + idx + 1);
+                shift = bytes_read + shift - idx - 1;
+                idx = -1;
+            } else {
+                shift = 0;
+            }
+
+            buffer_task_queue->push(QueueData{buffer, loc_vector});
+            buffer = buffer_new;
+        }
     }
 }
 
-void read_fastq_thread_long(FILE* fp, TBBQueue* buffer_task_queue) {
-    int num = 0;
-    int shift = 0;
-    int bef_shift;
-    int idx;
+void read_pair_fastq_thread(FileReader& file_reader1, FileReader& file_reader2, TBBPairQueue* buffer_task_queue) {
+    int num1 = 0, num2 = 0;
+    int shift1 = 0, shift2 = 0;
+    int bytes_read1, bytes_read2;
+    int idx1 = -1, idx2 = -1;
+    bool is_end1 = false, is_end2 = false;
+    char* buffer1;
+    char* buffer2;
+    char* buffer_new1;
+    char* buffer_new2;
 
-    off_t totout = 0;
-    off_t bytes_read;
-    off_t avail_out = 0;
+    buffer1 = (char*) malloc(sizeof(char) * LENGTH);
+    buffer2 = (char*) malloc(sizeof(char) * LENGTH);
 
-    unsigned char* buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + 1));
-    unsigned char* bef_buffer;
-    unsigned char* next_out = buffer;
+    while (true) {
+        LocationVector* loc_vector1 = new LocationVector{};
+        LocationVector* loc_vector2 = new LocationVector{};
 
-    int buffer_size = LENGTH;
-    QueueData bef_queue_data = {nullptr, nullptr, -1};
-
-    while (!feof(fp)) {
-        if (avail_out == 0) {
-            avail_out = LENGTH;
-            next_out = buffer + shift + buffer_size - LENGTH;
-        }
-
-        bytes_read = fread(next_out, 1, avail_out, fp);
-        totout += bytes_read;
-        avail_out -= bytes_read;
-
-        if ((avail_out == 0 and totout > 0) or feof(fp)) {
-            int seq_cnt = 0;
-            int bef_num = num;
-
-            LocationVector* loc_vector = new LocationVector{};
-
-            buffer[LENGTH - avail_out + shift] = '\0';
-            for (int i = 0; i < LENGTH - avail_out + shift; i++) {
-                if (buffer[i] == '\n') {
-                    num += 1;
-                    if ((num & 3) == 2) {
-                        seq_cnt += 1;
-                        if ((i - 1) - (idx + 1) + 1 >= SLICE_LENGTH) {
-                            loc_vector -> emplace_back(idx + 1, i - 1);
-                        }
-                    }
-                    idx = i;
+        if (!is_end1) {
+            bytes_read1 = file_reader1.read(buffer1 + shift1, LENGTH - 1 - shift1);
+            if (bytes_read1 <= 0) {
+                if (file_reader1.eof()) {
+                    is_end1 = true;
+                } else {
+                    fprintf(stderr, "File 1 IO Error: %s.\n", file_reader1.error());
+                    exit(EXIT_FAILURE);
                 }
             }
+        } else {
+            bytes_read1 = 0;
+        }
 
-            if ((num & 3) == 1 and bef_num == num and seq_cnt == 0) {
-                delete loc_vector;
-
-                buffer_size += LENGTH;
-                buffer = (unsigned char*) realloc(buffer, buffer_size + LENGTH + 1);
-            } else {
-                bef_shift = shift;
-                if ((num & 3) == 1) {
-                    shift = LENGTH - avail_out + shift - idx - 1;
+        if (!is_end2) {
+            bytes_read2 = file_reader2.read(buffer2 + shift2, LENGTH - 1 - shift2);
+            if (bytes_read2 <= 0) {
+                if (file_reader2.eof()) {
+                    is_end2 = true;
+                } else {
+                    fprintf(stderr, "File 2 IO Error: %s.\n", file_reader2.error());
+                    exit(EXIT_FAILURE);
                 }
-                else {
-                    shift = 0;
+            }
+        } else {
+            bytes_read2 = 0;
+        }
+
+        buffer1[bytes_read1 + shift1] = '\0';
+        buffer2[bytes_read2 + shift2] = '\0';
+
+        for (int i = 0; i < bytes_read1 + shift1; i++) {
+            if (buffer1[i] == '\n') {
+                num1 += 1;
+                if ((num1 & 3) == 2) {
+                    loc_vector1->emplace_back(idx1 + 1, i - 1);
                 }
-
-                bef_buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + shift + 1));
-                if ((num & 3) == 1) {
-                    strcpy(reinterpret_cast<char*>(bef_buffer), reinterpret_cast<char*>(buffer + idx + 1));
-                    idx = -1;
-                }
-
-                if (bef_queue_data.buffer != nullptr) {
-                    buffer_task_queue -> push(bef_queue_data);
-                }
-
-                bef_queue_data = QueueData{reinterpret_cast<char*>(buffer), loc_vector,
-                                (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) avail_out};
-
-
-                std::swap(bef_buffer, buffer);
-                buffer_size = LENGTH;
+                idx1 = i;
             }
         }
+
+        for (int i = 0; i < bytes_read2 + shift2; i++) {
+            if (buffer2[i] == '\n') {
+                num2 += 1;
+                if ((num2 & 3) == 2) {
+                    loc_vector2->emplace_back(idx2 + 1, i - 1);
+                }
+                idx2 = i;
+            }
+        }
+
+        if (is_end1 and is_end2) {
+            if (num1 != num2) {
+                fprintf(stderr, "Error: Mismatched record counts between files (num1: %d, num2: %d).\n", num1, num2);
+                exit(EXIT_FAILURE);
+            }
+            buffer_task_queue->push(PairQueueData{buffer1, buffer2, loc_vector1, loc_vector2});
+            break;
+        }
+
+        if (loc_vector1 -> size() == 0 and loc_vector2 -> size() > 0 or
+            loc_vector1 -> size() > 0 and loc_vector2 -> size() == 0) {
+            fprintf(stderr, "Paired-end error\n");
+            exit(EXIT_FAILURE);
+        }
+
+        buffer_new1 = (char*) malloc(sizeof(char) * LENGTH);
+        buffer_new2 = (char*) malloc(sizeof(char) * LENGTH);
+
+        size_t min_size = std::min(loc_vector1->size(), loc_vector2->size());
+
+        if (loc_vector1->size() > min_size) {
+            idx1 = (*loc_vector1)[min_size].first - 1;
+            strcpy(buffer_new1, buffer1 + idx1 + 1);
+            shift1 = bytes_read1 + shift1 - idx1 - 1;
+            num1 = ((num1 - 2) / 4) * 4 + 2 - 4 * (loc_vector1->size() - min_size);
+            idx1 = -1;
+        } else if ((num1 & 3) == 1) {
+            strcpy(buffer_new1, buffer1 + idx1 + 1);
+            shift1 = bytes_read1 + shift1 - idx1 - 1;
+            idx1 = -1;
+        } else {
+            shift1 = 0;
+        }
+
+        if (loc_vector2->size() > min_size) {
+            idx2 = (*loc_vector2)[min_size].first - 1;
+            strcpy(buffer_new2, buffer2 + idx2 + 1);
+            shift2 = bytes_read2 + shift2 - idx2 - 1;
+            num2 = ((num2 - 2) / 4) * 4 + 2 - 4 * (loc_vector2->size() - min_size);
+            idx2 = -1;
+        } else if ((num2 & 3) == 1) {
+            strcpy(buffer_new2, buffer2 + idx2 + 1);
+            shift2 = bytes_read2 + shift2 - idx2 - 1;
+            idx2 = -1;
+        } else {
+            shift2 = 0;
+        }
+
+        buffer_task_queue->push(PairQueueData{buffer1, buffer2, loc_vector1, loc_vector2});
+        buffer1 = buffer_new1;
+        buffer2 = buffer_new2;
     }
 
-    if (bef_queue_data.buffer != NULL) {
-        buffer_task_queue -> push(bef_queue_data);
+}
+
+void read_fastq_long_thread(FileReader& file_reader, TBBQueue* buffer_task_queue) {
+    int num = 0;
+    int shift = 0;
+    int bytes_read;
+    int idx = -1;
+    char* buffer;
+    char* buffer_new;
+
+    buffer = (char*) malloc(sizeof(char) * LENGTH);
+    while (1) {
+        LocationVector* loc_vector = new LocationVector{};
+
+        bytes_read = file_reader.read(buffer + shift, LENGTH - 1 - shift);
+        buffer[bytes_read + shift] = '\0';
+
+        for (int i = 0; i < bytes_read + shift; i++) {
+            if (buffer[i] == '\n') {
+                num += 1;
+                if ((num & 3) == 2 && (i - 1) - (idx + 1) + 1 >= SLICE_LENGTH) {
+                    loc_vector -> emplace_back(idx + 1, i - 1);
+                }
+                idx = i;
+            }
+        }
+
+        if (bytes_read <= 0) {
+            buffer_task_queue->push(QueueData{buffer, loc_vector});
+            if (file_reader.eof()) {
+                break;
+            } else {
+                fprintf(stderr, "File-IO Error: %s.\n", file_reader.error());
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            buffer_new = (char*) malloc(sizeof(char) * LENGTH);
+            if ((num & 3) == 1) {
+                strcpy(buffer_new, buffer + idx + 1);
+                shift = bytes_read + shift - idx - 1;
+                idx = -1;
+            } else {
+                shift = 0;
+            }
+
+            buffer_task_queue->push(QueueData{buffer, loc_vector});
+            buffer = buffer_new;
+        }
     }
 }
 
-void read_fastq_gz_thread(FILE* fp, gz_index **built, TBBQueue* buffer_task_queue) {
+void read_fastq_gz_thread_long(gzFile fp, TBBQueue* buffer_task_queue) {
     int num = 0;
     int shift = 0;
-    int bef_shift;
+    int bytes_read;
     int idx;
+    char* buffer;
+    char* buffer_new;
 
-    int64_t fq_cnt = 0;
+    buffer = (char*) malloc(sizeof(char) * LENGTH);
+    while (1) {
+        LocationVector* loc_vector = new LocationVector{};
 
-    // ZLIB index
-    *built = NULL;
-    off_t span = SPAN;
+        bytes_read = gzread(fp, buffer + shift, LENGTH - 1 - shift);
+        buffer[bytes_read + shift] = '\0';
 
-    // Create and initialize the index list.
-    gz_index *index = (gz_index*)malloc(sizeof(gz_index));
-    if (index == NULL) {
-        fprintf(stderr,  "memory allocation failure\n");
-        exit(EXIT_FAILURE);
-    }
+        for (int i = 0; i < bytes_read + shift; i++) {
+            if (buffer[i] == '\n') {
+                num += 1;
+                if ((num & 3) == 2 && (i - 1) - (idx + 1) + 1 >= SLICE_LENGTH) {
+                    loc_vector -> emplace_back(idx + 1, i - 1);
+                }
+                idx = i;
+            }
+        }
 
-    index->have = 0;
-    index->mode = 0;            // entries in index->list allocation
-    index->list = NULL;
-    index->strm.state = Z_NULL; // so inflateEnd() can work
-
-    // Set up the inflation state.
-    index->strm.avail_in = 0;
-    index->strm.avail_out = 0;
-
-    off_t totin = 0;            // total bytes read from input
-    off_t totout = 0;           // total bytes uncompressed
-    off_t beg = 0;              // starting offset of last history reset
-    int mode = 0;               // mode: RAW, ZLIB, or GZIP (0 => not set yet)
-
-    unsigned char* input_buf = (unsigned char*) malloc(sizeof(unsigned char) * CHUNK);
-
-    unsigned char* buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + 1));
-    unsigned char* bef_buffer;
-
-    int buffer_size = LENGTH;
-    int bef_buffer_size = LENGTH;
-
-    QueueData bef_queue_data = {nullptr, nullptr, -1};
-
-    int ret;                    // the return value from zlib, or Z_ERRNO
-    off_t last;                 // last access point uncompressed offset
-
-    do {
-        // Assure available input, at least until reaching EOF.
-        if (index->strm.avail_in == 0) {
-            index->strm.avail_in = fread(input_buf, 1, sizeof(unsigned char) * CHUNK, fp);
-            totin += index->strm.avail_in;
-            index->strm.next_in = input_buf;
-            if (index->strm.avail_in < sizeof(unsigned char) * CHUNK && ferror(fp)) {
-                ret = Z_ERRNO;
+        if (bytes_read < LENGTH - 1 - shift) {
+            buffer_task_queue -> push(QueueData{buffer, loc_vector});
+            if (gzeof(fp)) {
                 break;
             }
-
-            if (mode == 0) {
-                // At the start of the input -- determine the type. Assume raw
-                // if it is neither zlib nor gzip. This could in theory result
-                // in a false positive for zlib, but in practice the fill bits
-                // after a stored block are always zeros, so a raw stream won't
-                // start with an 8 in the low nybble.
-                mode = index->strm.avail_in == 0 ? RAW :    // will fail
-                       (index->strm.next_in[0] & 0xf) == 8 ? ZLIB :
-                       index->strm.next_in[0] == 0x1f ? GZIP :
-                       /* else */ RAW;
-                index->strm.zalloc = Z_NULL;
-                index->strm.zfree = Z_NULL;
-                index->strm.opaque = Z_NULL;
-                ret = inflateInit2(&index->strm, mode);
-                if (ret != Z_OK)
-                    break;
+            else {
+                fprintf(stderr, "File-IO Error: %s.\n", strerror(errno));
+                exit(EXIT_FAILURE);
             }
         }
-
-        // Assure available output. This rotates the output through, for use as
-        // a sliding window on the uncompressed data.
-        if (index->strm.avail_out == 0) {
-            index->strm.avail_out = LENGTH;
-            index->strm.next_out = buffer + shift + buffer_size - LENGTH;
-        }
-
-        if (mode == RAW && index->have == 0)
-            // We skip the inflate() call at the start of raw deflate data in
-            // order generate an access point there. Set data_type to imitate
-            // the end of a header.
-            index->strm.data_type = 0x80;
         else {
-            // Inflate and update the number of uncompressed bytes.
-            unsigned before = index->strm.avail_out;
-            ret = inflate(&index->strm, Z_BLOCK);
-            totout += before - index->strm.avail_out;
-        }
-
-        if (INDEX && (index->strm.data_type & 0xc0) == 0x80 &&
-            (index->have == 0 || totout - last >= span)) {
-            // We are at the end of a header or a non-last deflate block, so we
-            // can add an access point here. Furthermore, we are either at the
-            // very start for the first access point, or there has been span or
-            // more uncompressed bytes since the last access point, so we want
-            // to add an access point here.
-            index = add_point(index, totin - index->strm.avail_in, totout, beg,
-                              buffer + shift, bef_buffer + bef_shift, buffer_size, bef_buffer_size);
-            if (index == NULL) {
-                ret = Z_MEM_ERROR;
-                break;
+            buffer_new = (char*) malloc(sizeof(char) * LENGTH);
+            if ((num & 3) == 1) {
+                strcpy(buffer_new, buffer + idx + 1);
+                shift = bytes_read + shift - idx - 1;
+                idx = -1;
             }
-            last = totout;
-        }
-
-         if ((index->strm.avail_out == 0 and totout > 0) or ret == Z_STREAM_END) {
-            int seq_cnt = 0;
-            int bef_num = num;
-
-            LocationVector* loc_vector = new LocationVector{};
-
-            buffer[LENGTH - index->strm.avail_out + shift] = '\0';
-            for (int i = 0; i < LENGTH - index->strm.avail_out + shift; i++) {
-                if (buffer[i] == '\n') {
-                    num += 1;
-                    if ((num & 3) == 2) {
-                        if ((i - 1) - (idx + 1) + 1 > MAX_SEQ) {
-                            fprintf(stderr, "This mode is designed for short-read sequencing. Please use 'trew long'.\n");
-                            exit (EXIT_FAILURE);
-                        }
-                        seq_cnt += 1;
-                        fq_cnt += 1;
-                        loc_vector -> emplace_back(idx + 1, i - 1);
-                    }
-                    idx = i;
-                }
+            else {
+                shift = 0;
             }
-
-             if ((num & 3) == 1 and bef_num == num and seq_cnt == 0) {
-                 delete loc_vector;
-
-                 buffer_size += LENGTH;
-                 buffer = (unsigned char*) realloc(buffer, buffer_size + LENGTH + 1);
-             } else {
-                 bef_shift = shift;
-                 if ((num & 3) == 1) {
-                     shift = LENGTH - index->strm.avail_out + shift - idx - 1;
-                 }
-                 else {
-                     shift = 0;
-                 }
-
-                 bef_buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + shift + 1));
-                 if ((num & 3) == 1) {
-                     strcpy(reinterpret_cast<char*>(bef_buffer), reinterpret_cast<char*>(buffer + idx + 1));
-                     idx = -1;
-                 }
-
-                 if (bef_queue_data.buffer != nullptr) {
-                     buffer_task_queue -> push(bef_queue_data);
-                 }
-
-                 bef_queue_data = QueueData{reinterpret_cast<char*>(buffer), loc_vector,
-                                 (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) index->strm.avail_out, fq_cnt};
-
-
-                 std::swap(bef_buffer, buffer);
-                 bef_buffer_size = buffer_size;
-                 buffer_size = LENGTH;
-             }
+            buffer_task_queue -> push(QueueData{buffer, loc_vector});
+            buffer = buffer_new;
         }
-
-        if (ret == Z_STREAM_END && mode == GZIP &&
-            (index->strm.avail_in || ungetc(getc(fp), fp) != EOF)) {
-            // There is more input after the end of a gzip member. Reset the
-            // inflate state to read another gzip member. On success, this will
-            // set ret to Z_OK to continue decompressing.
-            ret = inflateReset2(&index->strm, GZIP);
-            beg = totout;           // reset history
-        }
-
-        // Keep going until Z_STREAM_END or error. If the compressed data ends
-        // prematurely without a file read error, Z_BUF_ERROR is returned.
-    } while (ret == Z_OK);
-
-    if (ret != Z_STREAM_END) {
-        // An error was encountered. Discard the index and return a negative
-        // error code.
-
-        deflate_index_free(index);
-        fprintf(stderr, "ZLIB error");
-        exit(ret);
-    }
-
-    if (bef_queue_data.buffer != NULL) {
-        buffer_task_queue -> push(bef_queue_data);
-    }
-
-    index->mode = mode;
-    index->length = totout;
-    if (INDEX) {
-        *built = index;
-    } else {
-        *built = NULL;
-        deflate_index_free(index);
     }
 }
-
-void read_fastq_gz_thread_long(FILE* fp, gz_index **built, TBBQueue* buffer_task_queue) {
-    int num = 0;
-    int shift = 0;
-    int bef_shift = 0;
-    int idx;
-
-    // ZLIB index
-    *built = NULL;
-    off_t span = SPAN;
-
-    // Create and initialize the index list.
-    gz_index *index = (gz_index*)malloc(sizeof(gz_index));
-    if (index == NULL) {
-        fprintf(stderr,  "memory allocation failure\n");
-        exit(EXIT_FAILURE);
-    }
-
-    index->have = 0;
-    index->mode = 0;            // entries in index->list allocation
-    index->list = NULL;
-    index->strm.state = Z_NULL; // so inflateEnd() can work
-
-    // Set up the inflation state.
-    index->strm.avail_in = 0;
-    index->strm.avail_out = 0;
-
-    off_t totin = 0;            // total bytes read from input
-    off_t totout = 0;           // total bytes uncompressed
-    off_t beg = 0;              // starting offset of last history reset
-    int mode = 0;               // mode: RAW, ZLIB, or GZIP (0 => not set yet)
-
-    unsigned char* input_buf = (unsigned char*) malloc(sizeof(unsigned char) * CHUNK);
-
-    unsigned char* buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + 1));
-    unsigned char* bef_buffer;
-
-    int buffer_size = LENGTH;
-    int bef_buffer_size = LENGTH;
-
-    QueueData bef_queue_data = {nullptr, nullptr, -1};
-
-    int ret;                    // the return value from zlib, or Z_ERRNO
-    off_t last;                 // last access point uncompressed offset
-
-    do {
-        // Assure available input, at least until reaching EOF.
-        if (index->strm.avail_in == 0) {
-            index->strm.avail_in = fread(input_buf, 1, sizeof(unsigned char) * CHUNK, fp);
-            totin += index->strm.avail_in;
-            index->strm.next_in = input_buf;
-            if (index->strm.avail_in < sizeof(unsigned char) * CHUNK && ferror(fp)) {
-                ret = Z_ERRNO;
-                break;
-            }
-
-            if (mode == 0) {
-                // At the start of the input -- determine the type. Assume raw
-                // if it is neither zlib nor gzip. This could in theory result
-                // in a false positive for zlib, but in practice the fill bits
-                // after a stored block are always zeros, so a raw stream won't
-                // start with an 8 in the low nybble.
-                mode = index->strm.avail_in == 0 ? RAW :    // will fail
-                       (index->strm.next_in[0] & 0xf) == 8 ? ZLIB :
-                       index->strm.next_in[0] == 0x1f ? GZIP :
-                       /* else */ RAW;
-                index->strm.zalloc = Z_NULL;
-                index->strm.zfree = Z_NULL;
-                index->strm.opaque = Z_NULL;
-                ret = inflateInit2(&index->strm, mode);
-                if (ret != Z_OK)
-                    break;
-            }
-        }
-
-        // Assure available output. This rotates the output through, for use as
-        // a sliding window on the uncompressed data.
-        if (index->strm.avail_out == 0) {
-            index->strm.avail_out = LENGTH;
-            index->strm.next_out = buffer + shift + buffer_size - LENGTH;
-        }
-
-        if (mode == RAW && index->have == 0)
-            // We skip the inflate() call at the start of raw deflate data in
-            // order generate an access point there. Set data_type to imitate
-            // the end of a header.
-            index->strm.data_type = 0x80;
-        else {
-            // Inflate and update the number of uncompressed bytes.
-            unsigned before = index->strm.avail_out;
-            ret = inflate(&index->strm, Z_BLOCK);
-            totout += before - index->strm.avail_out;
-        }
-
-        if (INDEX && (index->strm.data_type & 0xc0) == 0x80 &&
-            (index->have == 0 || totout - last >= span)) {
-            // We are at the end of a header or a non-last deflate block, so we
-            // can add an access point here. Furthermore, we are either at the
-            // very start for the first access point, or there has been span or
-            // more uncompressed bytes since the last access point, so we want
-            // to add an access point here.
-            index = add_point(index, totin - index->strm.avail_in, totout, beg,
-                              buffer + shift, bef_buffer + bef_shift, buffer_size, bef_buffer_size);
-            if (index == NULL) {
-                ret = Z_MEM_ERROR;
-                break;
-            }
-            last = totout;
-        }
-
-        if ((index->strm.avail_out == 0 and totout > 0) or ret == Z_STREAM_END) {
-            int seq_cnt = 0;
-            int bef_num = num;
-
-            LocationVector* loc_vector = new LocationVector{};
-
-            buffer[buffer_size - index->strm.avail_out + shift] = '\0';
-            for (int i = 0; i < buffer_size - index->strm.avail_out + shift; i++) {
-                if (buffer[i] == '\n') {
-                    num += 1;
-                    if ((num & 3) == 2) {
-                        seq_cnt += 1;
-                        if ((i - 1) - (idx + 1) + 1 >= SLICE_LENGTH) {
-                            loc_vector -> emplace_back(idx + 1, i - 1);
-                        } else {
-                            int t = 1;
-                        }
-                    }
-                    idx = i;
-                }
-            }
-
-            if ((num & 3) == 1 and bef_num == num and seq_cnt == 0) {
-                delete loc_vector;
-
-                buffer_size += LENGTH;
-                buffer = (unsigned char*) realloc(buffer, buffer_size + LENGTH + 1);
-
-                printf("HELP!\n");
-            } else {
-                bef_shift = shift;
-                if ((num & 3) == 1) {
-                    shift = buffer_size - index->strm.avail_out + shift - idx - 1;
-                }
-                else {
-                    shift = 0;
-                }
-
-                bef_buffer = (unsigned char*) malloc(sizeof(unsigned char) * (LENGTH + shift + 1));
-                if ((num & 3) == 1) {
-                    strcpy(reinterpret_cast<char*>(bef_buffer), reinterpret_cast<char*>(buffer + idx + 1));
-                    idx = -1;
-                }
-
-                if (bef_queue_data.buffer != nullptr) {
-                    buffer_task_queue -> push(bef_queue_data);
-                }
-
-                // printf("%lld\n", totout);
-
-                bef_queue_data = QueueData{reinterpret_cast<char*>(buffer), loc_vector,
-                                    (int64_t) totout - (int64_t) bef_shift - (int64_t) buffer_size + (int64_t) index->strm.avail_out};
-
-
-                std::swap(bef_buffer, buffer);
-                bef_buffer_size = buffer_size;
-                buffer_size = LENGTH;
-            }
-        }
-
-        if (ret == Z_STREAM_END && mode == GZIP &&
-            (index->strm.avail_in || ungetc(getc(fp), fp) != EOF)) {
-            // There is more input after the end of a gzip member. Reset the
-            // inflate state to read another gzip member. On success, this will
-            // set ret to Z_OK to continue decompressing.
-            ret = inflateReset2(&index->strm, GZIP);
-            beg = totout;           // reset history
-        }
-
-        // Keep going until Z_STREAM_END or error. If the compressed data ends
-        // prematurely without a file read error, Z_BUF_ERROR is returned.
-    } while (ret == Z_OK);
-
-    if (ret != Z_STREAM_END) {
-        // An error was encountered. Discard the index and return a negative
-        // error code.
-
-        deflate_index_free(index);
-        fprintf(stderr, "ZLIB error");
-        exit(ret);
-    }
-
-    if (bef_queue_data.buffer != NULL) {
-        buffer_task_queue -> push(bef_queue_data);
-    }
-
-    index->mode = mode;
-    index->length = totout;
-    if (INDEX) {
-        *built = index;
-    } else {
-        *built = NULL;
-        deflate_index_free(index);
-    }
-}
-
 
 FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                   uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                                  ThreadData* thread_data_list, bool is_gz, gz_index **built, const int read_type) {
-    ResultMapPairData* result_list = (ResultMapPairData*) malloc(sizeof(ResultMapPairData) * NUM_THREAD);
+                                  ThreadData* thread_data_list, bool is_gz) {
+    ResultMapData* result_list = (ResultMapData*) malloc(sizeof(ResultMapData) * NUM_THREAD);
 
     TBBQueue buffer_task_queue {};
     TaskGroup tasks;
@@ -1434,30 +1269,30 @@ FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_tabl
     }
 
     for (int i = 0; i < NUM_THREAD - 1; i++) {
-        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table, &read_type]{
-            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table, read_type);
+        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
         });
     }
 
+    FileReader reader;
     if (is_gz) {
-        FILE* fp = fopen(file_name, "rb");
+        gzFile fp = gzopen(file_name, "r");
         if (fp == nullptr) {
             fprintf(stderr, "File open failed\n");
             exit (EXIT_FAILURE);
         }
-
-        read_fastq_gz_thread(fp, built, &buffer_task_queue);
-        fclose(fp);
+        reader = fp;
     } else {
         FILE* fp = fopen(file_name, "r");
         if (fp == nullptr) {
             fprintf(stderr, "File open failed\n");
             exit (EXIT_FAILURE);
         }
-
-        read_fastq_thread(fp, &buffer_task_queue);
-        fclose(fp);
+        reader = fp;
     }
+
+    read_fastq_thread(reader, &buffer_task_queue);
+    reader.close();
 
     for (int i = 1; i < NUM_THREAD; i ++) {
         buffer_task_queue.push(QueueData{nullptr, nullptr});
@@ -1468,14 +1303,14 @@ FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_tabl
 
         int i = NUM_THREAD - 1;
         if (NUM_THREAD > 1) {
-            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table, &read_type]{
-                result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table, read_type);
+            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+                result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
             });
         } else {
-            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table, read_type);
+            result_list[i] = buffer_task(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
         }
     } else {
-        result_list[NUM_THREAD - 1] = ResultMapPairData {{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}}, new std::vector<FastqLocData> {}};
+        result_list[NUM_THREAD - 1] = ResultMapData{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}};
     }
 
     if (NUM_THREAD > 1) {
@@ -1485,10 +1320,92 @@ FinalFastqOutput process_kmer(const char* file_name, uint8_t **repeat_check_tabl
     return process_output(file_name, result_list, rot_table, extract_k_mer_ans);
 }
 
+FinalFastqOutput process_kmer_pair(const char* file_name1, const char* file_name2, uint8_t **repeat_check_table, uint32_t **rot_table,
+                                   uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
+                                   ThreadData* thread_data_list, bool is_gz1, bool is_gz2) {
+    ResultMapData* result_list = (ResultMapData*) malloc(sizeof(ResultMapData) * NUM_THREAD);
+
+    TBBPairQueue buffer_task_queue {};
+    TaskGroup tasks;
+
+    if (QUEUE_SIZE >= 4) {
+        buffer_task_queue.set_capacity(QUEUE_SIZE / 4);
+    }
+
+    for (int i = 0; i < NUM_THREAD - 1; i++) {
+        tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+            result_list[i] = buffer_task_pair(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+        });
+    }
+
+    FileReader reader1;
+    if (is_gz1) {
+        gzFile fp = gzopen(file_name1, "r");
+        if (fp == nullptr) {
+            fprintf(stderr, "File open failed\n");
+            exit (EXIT_FAILURE);
+        }
+        reader1 = fp;
+    } else {
+        FILE* fp = fopen(file_name1, "r");
+        if (fp == nullptr) {
+            fprintf(stderr, "File open failed\n");
+            exit (EXIT_FAILURE);
+        }
+        reader1 = fp;
+    }
+
+    FileReader reader2;
+    if (is_gz2) {
+        gzFile fp = gzopen(file_name2, "r");
+        if (fp == nullptr) {
+            fprintf(stderr, "File open failed\n");
+            exit (EXIT_FAILURE);
+        }
+        reader2 = fp;
+    } else {
+        FILE* fp = fopen(file_name2, "r");
+        if (fp == nullptr) {
+            fprintf(stderr, "File open failed\n");
+            exit (EXIT_FAILURE);
+        }
+        reader2 = fp;
+    }
+
+    read_pair_fastq_thread(reader1, reader2, &buffer_task_queue);
+    reader1.close();
+    reader2.close();
+
+    for (int i = 1; i < NUM_THREAD; i ++) {
+        buffer_task_queue.push(PairQueueData{nullptr, nullptr});
+    }
+
+    if (!buffer_task_queue.empty()) {
+        buffer_task_queue.push(PairQueueData{nullptr, nullptr});
+
+        int i = NUM_THREAD - 1;
+        if (NUM_THREAD > 1) {
+            tasks.run([&result_list, i, &buffer_task_queue, &thread_data_list, &rot_table, &extract_k_mer, &extract_k_mer_128, &repeat_check_table]{
+                result_list[i] = buffer_task_pair(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+            });
+        } else {
+            result_list[i] = buffer_task_pair(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
+        }
+    } else {
+        result_list[NUM_THREAD - 1] = ResultMapData{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}};
+    }
+
+    if (NUM_THREAD > 1) {
+        tasks.wait();
+    }
+
+    return process_output(file_name1, result_list, rot_table, extract_k_mer_ans);
+}
+
 FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check_table, uint32_t **rot_table,
                                        uint64_t *extract_k_mer, uint128_t *extract_k_mer_128, uint128_t *extract_k_mer_ans,
-                                       ThreadData* thread_data_list, bool is_gz, gz_index **built) {
-    ResultMapPairData* result_list = (ResultMapPairData*) malloc(sizeof(ResultMapPairData) * NUM_THREAD);
+                                       ThreadData* thread_data_list, bool is_gz) {
+    ResultMapData* result_list = (ResultMapData*) malloc(sizeof(ResultMapData) * NUM_THREAD);
 
     TBBQueue buffer_task_queue {};
     TaskGroup tasks;
@@ -1503,6 +1420,7 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
         });
     }
 
+    FileReader reader;
     if (is_gz) {
         FILE* fp = fopen(file_name, "rb");
         if (fp == nullptr) {
@@ -1510,8 +1428,7 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
             exit (EXIT_FAILURE);
         }
 
-        read_fastq_gz_thread_long(fp, built, &buffer_task_queue);
-        fclose(fp);
+        reader = fp;
     } else {
         FILE* fp = fopen(file_name, "r");
         if (fp == nullptr) {
@@ -1519,9 +1436,11 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
             exit (EXIT_FAILURE);
         }
 
-        read_fastq_thread_long(fp, &buffer_task_queue);
-        fclose(fp);
+        reader = fp;
     }
+
+    read_fastq_long_thread(reader, &buffer_task_queue);
+    reader.close();
 
     for (int i = 1; i < NUM_THREAD; i ++) {
         buffer_task_queue.push(QueueData{nullptr, nullptr});
@@ -1539,7 +1458,7 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
             result_list[i] = buffer_task_long(&buffer_task_queue, thread_data_list + i, rot_table, extract_k_mer, extract_k_mer_128, repeat_check_table);
         }
     } else {
-        result_list[NUM_THREAD - 1] = ResultMapPairData {{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}}, new std::vector<FastqLocData> {}};
+        result_list[NUM_THREAD - 1] = ResultMapData{{new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}, {new ResultMap {}, new ResultMap {}}};
     }
 
     if (NUM_THREAD > 1) {
@@ -1549,52 +1468,43 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
     return process_output(file_name, result_list, rot_table, extract_k_mer_ans);
 }
 
-FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result_list, uint32_t **rot_table, uint128_t *extract_k_mer_ans) {
+FinalFastqOutput process_output(const char* file_name, ResultMapData* result_list, uint32_t **rot_table, uint128_t *extract_k_mer_ans) {
     uint128_t _t;
     uint128_t kseq;
     int64_t _tcnt;
 
 
-    std::vector<FastqLocData>* fastq_loc_data = result_list[0].second;
-    for (int i = 1; i < NUM_THREAD; i++) {
-        for (auto &t : *(result_list[i].second)) {
-            fastq_loc_data -> emplace_back(t);
-        }
-
-        delete result_list[i].second;
-    }
-
     char* buffer = (char*) malloc(sizeof(char) * (ABS_MAX_MER + 1));
 
-    ResultMapData result_data = result_list[0].first;
+    ResultMapData result_data = result_list[0];
     for (int i = 1; i < NUM_THREAD; i++) {
-        for (auto &[k, v]: *(result_list[i].first.forward.first)) {
+        for (auto &[k, v]: *(result_list[i].forward.first)) {
             (*(result_data.forward.first))[k] += v;
         }
-        for (auto &[k, v]: *(result_list[i].first.backward.first)) {
+        for (auto &[k, v]: *(result_list[i].backward.first)) {
             (*(result_data.backward.first))[k] += v;
         }
-        for (auto &[k, v]: *(result_list[i].first.both.first)) {
+        for (auto &[k, v]: *(result_list[i].both.first)) {
             (*(result_data.both.first))[k] += v;
         }
 
-        for (auto &[k, v]: *(result_list[i].first.forward.second)) {
+        for (auto &[k, v]: *(result_list[i].forward.second)) {
             (*(result_data.forward.second))[k] += v;
         }
-        for (auto &[k, v]: *(result_list[i].first.backward.second)) {
+        for (auto &[k, v]: *(result_list[i].backward.second)) {
             (*(result_data.backward.second))[k] += v;
         }
-        for (auto &[k, v]: *(result_list[i].first.both.second)) {
+        for (auto &[k, v]: *(result_list[i].both.second)) {
             (*(result_data.both.second))[k] += v;
         }
 
-        delete result_list[i].first.forward.first;
-        delete result_list[i].first.backward.first;
-        delete result_list[i].first.both.first;
+        delete result_list[i].forward.first;
+        delete result_list[i].backward.first;
+        delete result_list[i].both.first;
 
-        delete result_list[i].first.forward.second;
-        delete result_list[i].first.backward.second;
-        delete result_list[i].first.both.second;
+        delete result_list[i].forward.second;
+        delete result_list[i].backward.second;
+        delete result_list[i].both.second;
     }
     // free(result_list);
 
@@ -1713,7 +1623,7 @@ FinalFastqOutput process_output(const char* file_name, ResultMapPairData* result
         }
     }
 
-    return FinalFastqOutput {final_result_high_vector, final_result_low_vector, fastq_loc_data};
+    return FinalFastqOutput {final_result_high_vector, final_result_low_vector};
 }
 
 uint8_t** set_repeat_check_table() {
@@ -2651,8 +2561,8 @@ bool check_ans_seq(const KmerSeq& seq, uint128_t* extract_k_mer_ans, uint32_t** 
     return true;
 }
 
-TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low) {
-    const auto final_output = new TRMDirVector {};
+void final_process_output(FinalFastqData* total_result_high, FinalFastqData* total_result_low) {
+    TRMDirMap trm_map = {};
 
     bool max_cnt_check = false;
     for (auto& [k, v] : *total_result_high) {
@@ -2741,7 +2651,7 @@ TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastq
                 bonus += 1;
             }
 
-            final_output -> emplace_back(k, final_dir);
+            trm_map[k] = final_dir;
             score_result_vector.push_back({k, {v + bonus, dna_cnt}});
         }
 
@@ -2759,13 +2669,7 @@ TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastq
         for (int i = 0; i < MIN(ABS_MAX_ANS_NUM, score_result_vector.size()); i++) {
             int_to_four(buffer, score_result_vector[i].first.second, score_result_vector[i].first.first);
 
-            int dir = 0;
-            for (auto& [k, v] : *final_output) {
-                if (k == score_result_vector[i].first) {
-                    dir = v;
-                    break;
-                }
-            }
+            int dir = trm_map[score_result_vector[i].first];
             char sign = (dir == 1) ? '+' :
                         (dir == -1) ? '-' : '?';
             fprintf(stdout, "%d,%s,%" PRIu32",%c\n", score_result_vector[i].first.first, buffer, score_result_vector[i].second.first, sign);
@@ -2777,8 +2681,6 @@ TRMDirVector* final_process_output(FinalFastqData* total_result_high, FinalFastq
 
     delete total_result_low;
     delete total_result_high;
-
-    return final_output;
 }
 
 ResultMap* get_score_map(FinalFastqData* total_result) {
@@ -2849,166 +2751,4 @@ ResultMap* get_score_map(FinalFastqData* total_result) {
     }
 
     return score_result_map;
-}
-
-void get_trm_read(const std::filesystem::path &fastq_path, TRMDirVector* put_trm, FinalFastqOutput fastq_file_data, gz_index* index,
-                   size_t st, size_t nd, char* temp_path) {
-    TRMDirMap trm_dir = {};
-    for (auto&[k, a] : *put_trm) {
-        trm_dir[k] = a;
-    }
-
-    FILE *in = fopen(std::filesystem::canonical(fastq_path).string().c_str(), "rb");
-    int buf_size = LENGTH;
-    unsigned char* buf = (unsigned char*) malloc(sizeof(unsigned char) * (buf_size + 1));
-
-    FILE *fp = fopen(temp_path, "w");
-    for (size_t i = st; i < nd; i++) {
-        auto &[pos, rht, lef, _, rht_seq, lef_seq] = (*fastq_file_data.k_mer_loc_vector)[i];
-
-        if (buf_size < pos.second) {
-            free(buf);
-            buf_size = pos.second;
-            buf = (unsigned char*) malloc(sizeof(unsigned char) * (buf_size + 1));
-        }
-
-        std::vector<std::pair<std::pair<bool, bool>, KmerSeq>> seq_vector = {};
-
-        if (rht.first != rht.second) {
-            if (rht.first != 0) {
-                seq_vector.push_back({{false, true}, {rht.first, rht_seq.first}});
-            }
-            if (rht.second != 0) {
-                seq_vector.push_back({{false, false}, {rht.second, rht_seq.second}});
-            }
-        }
-
-        if (lef.first != lef.second) {
-            if (lef.first != 0) {
-                seq_vector.push_back({{true, true}, {lef.first, lef_seq.first}});
-            }
-            if (lef.second != 0) {
-                seq_vector.push_back({{true, false}, {lef.second, lef_seq.second}});
-            }
-        }
-
-        uint128_t _t;
-        absl::flat_hash_set<KmerSeq> output_set {};
-        bool seq_dir, aln_dir, loc_dir, is_high;
-
-        for (auto &[data, seq] : seq_vector) {
-            _t = get_rot_seq_128(reverse_complement_128(seq.second) >> (2 * (64 - seq.first)), seq.first);
-            KmerSeq kseq = KmerSeq {seq.first, MIN(_t, seq.second)};
-            if (trm_dir.contains(KmerSeq {seq.first, MIN(_t, seq.second)}) and (not output_set.contains(kseq))) {
-                loc_dir = data.first;
-                is_high = data.second;
-
-                seq_dir = MIN(_t, seq.second) == seq.second;
-
-                if (trm_dir[kseq] != 0) {
-                    aln_dir = trm_dir[kseq] == 1;
-
-                    char buffer[ABS_MAX_MER + 1];
-                    int_to_four(buffer, MIN(_t, seq.second), seq.first);
-                    fprintf(fp, ">%s.%c.%c\n", buffer, loc_dir ? 'F' : 'B', (seq_dir == loc_dir) == aln_dir ? 'T' : 'F');
-                    ptrdiff_t got = deflate_index_extract(in, index, pos.first, buf, pos.second);
-                    if (got <= 0)
-                        fprintf(stderr, "zran: extraction failed: %s error\n",
-                                got == Z_MEM_ERROR ? "out of memory" : "input corrupted");
-                    else {
-                        fwrite(buf, 1, got, fp);
-                        fprintf(fp, "\n");
-                    }
-                    output_set.insert(kseq);
-                } else {
-                    fprintf(stderr, "Score direction error!\n");
-                }
-            }
-        }
-    }
-    fclose(in);
-    fclose(fp);
-}
-
-gz_index *get_thread_safe_index(gz_index* index) {
-    if (index == NULL) {
-        return NULL;
-    }
-
-    gz_index *safe_index = (gz_index*) malloc(sizeof(gz_index));
-    safe_index->have = index->have;
-    safe_index->mode = index->mode;
-    safe_index->length = index->length;
-    safe_index->list = index->list;
-    safe_index->strm = index->strm;
-
-    inflateInit2(&safe_index->strm, index->mode);
-    return safe_index;
-}
-
-void paired_end_bonus_result(ResultMapData result, uint32_t** rot_table, uint8_t** repeat_check_table, const uint128_t *extract_k_mer,
-                             uint16_t** k_mer_counter, CounterMap_128* k_mer_counter_map,
-                             uint128_t** k_mer_data, uint32_t** k_mer_counter_list, int16_t* k_mer_total_cnt,
-                             std::vector<FastqLocData>* fq1_k_loc_vector, std::vector<FastqLocData>* fq2_k_loc_vector,
-                             FILE* fp1, FILE* fp2,
-                             gz_index* fq1_index, gz_index* fq2_index) {
-
-    std::sort(fq1_k_loc_vector->begin(), fq1_k_loc_vector->end(), [](const FastqLocData& a, const FastqLocData& b) {
-                  return a.fq_cnt < b.fq_cnt;
-    });
-    std::sort(fq2_k_loc_vector->begin(), fq2_k_loc_vector->end(), [](const FastqLocData& a, const FastqLocData& b) {
-                  return a.fq_cnt < b.fq_cnt;
-    });
-
-    unsigned char buf [MAX_SEQ + 1];
-    auto add_bonus_data = [&](int fq1_lef_kmer, int fq2_lef_kmer, int fq1_rht_kmer, int fq2_rht_kmer,
-                              KmerSeq fq1_lef_seq, KmerSeq fq2_lef_seq, KmerSeq fq1_rht_seq, KmerSeq fq2_rht_seq,
-                              std::pair<int64_t, int64_t> fq1_pos, std::pair<int64_t, int64_t> fq2_pos, gz_index* fq1_gz_index, gz_index* fq2_gz_index,
-                              bool is_high) {
-        // (k, n, n, n)
-        if ((fq1_lef_kmer != fq1_rht_kmer) and (fq1_rht_kmer == fq2_lef_kmer) and (fq2_lef_kmer == fq2_rht_kmer) and fq2_lef_kmer > 0
-            and rot_reverse_complement(fq1_rht_seq) == fq2_lef_seq and fq2_lef_seq == fq2_rht_seq) {
-            ptrdiff_t got = deflate_index_extract(fp2, fq2_gz_index, fq2_pos.first, buf, fq2_pos.second);
-
-            k_mer_check_128(reinterpret_cast<char*>(buf), 0, got, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                            k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {is_high ? result.forward.first : nullptr, is_high ? nullptr : result.forward.second},
-                            k_mer_total_cnt, fq1_rht_kmer, fq1_rht_kmer);
-        }
-
-        // (n, n, n, k)
-        if ((fq1_lef_kmer == fq1_rht_kmer) and (fq1_rht_kmer == fq2_lef_kmer) and (fq2_lef_kmer != fq2_rht_kmer) and fq2_lef_kmer > 0
-            and rot_reverse_complement(fq2_lef_seq) == fq1_rht_seq and fq1_rht_seq == fq1_lef_seq) {
-            ptrdiff_t got = deflate_index_extract(fp1, fq1_gz_index, fq1_pos.first, buf, fq1_pos.second);
-
-            k_mer_check_128(reinterpret_cast<char*>(buf), 0, got, rot_table, extract_k_mer, k_mer_counter, k_mer_counter_map,
-                            k_mer_data, k_mer_counter_list, repeat_check_table, ResultMapPair {is_high ? result.forward.first : nullptr, is_high ? nullptr : result.forward.second},
-                            k_mer_total_cnt, fq2_lef_kmer, fq2_lef_kmer);
-
-        }
-    };
-
-    size_t i = 0, j = 0;
-    while (i < fq1_k_loc_vector->size() && j < fq2_k_loc_vector->size()) {
-        const FastqLocData& fq1_data = (*fq1_k_loc_vector)[i];
-        const FastqLocData& fq2_data = (*fq2_k_loc_vector)[j];
-
-        if (fq1_data.fq_cnt == fq2_data.fq_cnt) {
-            add_bonus_data(fq1_data.lef_kmer.first, fq2_data.lef_kmer.first, fq1_data.rht_kmer.first, fq2_data.rht_kmer.first,
-                           KmerSeq {fq1_data.lef_kmer.first, fq1_data.lef_seq.first}, KmerSeq {fq2_data.lef_kmer.first, fq2_data.lef_seq.first},
-                           KmerSeq {fq1_data.rht_kmer.first, fq1_data.rht_seq.first}, KmerSeq {fq2_data.rht_kmer.first, fq2_data.rht_seq.first},
-                           fq1_data.pos, fq2_data.pos, fq1_index, fq2_index, true);
-
-            add_bonus_data(fq1_data.lef_kmer.second, fq2_data.lef_kmer.second, fq1_data.rht_kmer.second, fq2_data.rht_kmer.second,
-                           KmerSeq {fq1_data.lef_kmer.second, fq1_data.lef_seq.second}, KmerSeq {fq2_data.lef_kmer.second, fq2_data.lef_seq.second},
-                           KmerSeq {fq1_data.rht_kmer.second, fq1_data.rht_seq.second}, KmerSeq {fq2_data.rht_kmer.second, fq2_data.rht_seq.second},
-                           fq1_data.pos, fq2_data.pos, fq1_index, fq2_index, false);
-
-            ++i;
-            ++j;
-        } else if (fq1_data.fq_cnt < fq2_data.fq_cnt) {
-            ++i;
-        } else {
-            ++j;
-        }
-    }
 }
