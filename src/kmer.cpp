@@ -1055,6 +1055,7 @@ void read_pair_fastq_thread(FileReader& file_reader1, FileReader& file_reader2, 
             if (bytes_read1 <= 0) {
                 if (file_reader1.eof()) {
                     is_end1 = true;
+                    bytes_read1 = 0;
                 } else {
                     fprintf(stderr, "File 1 IO Error: %s.\n", file_reader1.error());
                     exit(EXIT_FAILURE);
@@ -1069,6 +1070,7 @@ void read_pair_fastq_thread(FileReader& file_reader1, FileReader& file_reader2, 
             if (bytes_read2 <= 0) {
                 if (file_reader2.eof()) {
                     is_end2 = true;
+                    bytes_read2 = 0;
                 } else {
                     fprintf(stderr, "File 2 IO Error: %s.\n", file_reader2.error());
                     exit(EXIT_FAILURE);
@@ -1125,7 +1127,7 @@ void read_pair_fastq_thread(FileReader& file_reader1, FileReader& file_reader2, 
             idx1 = (*loc_vector1)[min_size].first - 1;
             strcpy(buffer_new1, buffer1 + idx1 + 1);
             shift1 = bytes_read1 + shift1 - idx1 - 1;
-            num1 = ((num1 - 2) / 4) * 4 + 2 - 4 * (loc_vector1->size() - min_size);
+            num1 = ((num1 - 2) / 4) * 4 + 1 - 4 * (loc_vector1->size() - min_size - 1);
             idx1 = -1;
         } else if ((num1 & 3) == 1) {
             strcpy(buffer_new1, buffer1 + idx1 + 1);
@@ -1139,7 +1141,7 @@ void read_pair_fastq_thread(FileReader& file_reader1, FileReader& file_reader2, 
             idx2 = (*loc_vector2)[min_size].first - 1;
             strcpy(buffer_new2, buffer2 + idx2 + 1);
             shift2 = bytes_read2 + shift2 - idx2 - 1;
-            num2 = ((num2 - 2) / 4) * 4 + 2 - 4 * (loc_vector2->size() - min_size);
+            num2 = ((num2 - 2) / 4) * 4 + 1 - 4 * (loc_vector2->size() - min_size - 1);
             idx2 = -1;
         } else if ((num2 & 3) == 1) {
             strcpy(buffer_new2, buffer2 + idx2 + 1);
