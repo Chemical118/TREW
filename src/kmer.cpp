@@ -297,7 +297,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
 
     if (MAX_MER <= ABS_UINT64_MAX_MER) {
         CounterMap* k_mer_counter_map = nullptr;
-        std::pair<uint64_t, uint64_t> k_mer_seq, temp_k_mer_seq;
+        std::pair<uint64_t, uint64_t> lef_k_mer_seq, k_mer_seq, temp_k_mer_seq;
         std::pair<uint64_t, uint64_t> lef_seq, rht_seq;
 
         if (TABLE_MAX_MER < MAX_MER) {
@@ -342,6 +342,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                         snum = 4;
                         si = {1, 1};
                         k_mer = {0, 0};
+                        repeat_end = {false, false};
 
                         for (ti = 1; ti <= snum && (!repeat_end.first || !repeat_end.second) ; ti++) {
                             temp_k_mer = k_mer_check(buffer_vector[ti - 1], index_vector[ti - 1].first, index_vector[ti - 1].second, rot_table, extract_k_mer, k_mer_counter,
@@ -372,6 +373,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             }
                         }
                         lef_k_mer = k_mer;
+                        lef_k_mer_seq = k_mer_seq;
 
                         if (si.first == snum + 1) {
                             for (auto& [seq, cnt] : *(temp_result_left.first)) {
@@ -400,6 +402,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             sj = {snum, snum};
                             k_mer = {0, 0};
                             repeat_end = {false, false};
+
                             for (tj = snum; !repeat_end.first || !repeat_end.second; tj--) {
                                 temp_k_mer = k_mer_check(buffer_vector[tj - 1], index_vector[tj - 1].first, index_vector[tj - 1].second, rot_table, extract_k_mer, k_mer_counter,
                                                              k_mer_counter_map, k_mer_data, k_mer_counter_list, repeat_check_table,
@@ -432,7 +435,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             }
                         }
 
-                        if (si.first <= snum) {
+                        if (si.first <= snum and not (lef_k_mer.first == k_mer.first and lef_k_mer_seq.first == get_rot_seq(reverse_complement_64(k_mer_seq.first) >> (2 * (32 - k_mer.first)), k_mer.first))) {
                             for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                 (*(result.forward.first))[seq] += cnt;
                             }
@@ -441,7 +444,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                                 (*(result.backward.first))[seq] += cnt;
                             }
                         }
-                        if (si.second <= snum) {
+                        if (si.second <= snum and not (lef_k_mer.second == k_mer.second and lef_k_mer_seq.second == get_rot_seq(reverse_complement_64(k_mer_seq.second) >> (2 * (32 - k_mer.second)), k_mer.second))) {
                             for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                 (*(result.forward.second))[seq] += cnt;
                             }
@@ -513,7 +516,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
         delete[] k_mer_counter_map;
     } else {
         CounterMap_128* k_mer_counter_map = new CounterMap_128[MAX_MER - TABLE_MAX_MER];
-        std::pair<uint128_t, uint128_t> k_mer_seq, temp_k_mer_seq;
+        std::pair<uint128_t, uint128_t> lef_k_mer_seq, k_mer_seq, temp_k_mer_seq;
         std::pair<uint128_t, uint128_t> lef_seq, rht_seq;
 
         auto get_dir_seq = [](int i, int k, uint128_t seq, bool is_for) {
@@ -554,6 +557,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                         snum = 4;
                         si = {1, 1};
                         k_mer = {0, 0};
+                        repeat_end = {false, false};
 
                         for (ti = 1; ti <= snum && (!repeat_end.first || !repeat_end.second) ; ti++) {
                             temp_k_mer = k_mer_check_128(buffer_vector[ti - 1], index_vector[ti - 1].first, index_vector[ti - 1].second, rot_table, extract_k_mer_128, k_mer_counter,
@@ -584,6 +588,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             }
                         }
                         lef_k_mer = k_mer;
+                        lef_k_mer_seq = k_mer_seq;
 
                         if (si.first == snum + 1) {
                             for (auto& [seq, cnt] : *(temp_result_left.first)) {
@@ -644,7 +649,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             }
                         }
 
-                        if (si.first <= snum) {
+                        if (si.first <= snum and not (lef_k_mer.first == k_mer.first and lef_k_mer_seq.first == get_rot_seq_128(reverse_complement_128(k_mer_seq.first) >> (2 * (64 - k_mer.first)), k_mer.first))) {
                             for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                 (*(result.forward.first))[seq] += cnt;
                             }
@@ -653,7 +658,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                                 (*(result.backward.first))[seq] += cnt;
                             }
                         }
-                        if (si.second <= snum) {
+                        if (si.second <= snum and not (lef_k_mer.second == k_mer.second and lef_k_mer_seq.second == get_rot_seq_128(reverse_complement_128(k_mer_seq.second) >> (2 * (64 - k_mer.second)), k_mer.second))) {
                             for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                 (*(result.forward.second))[seq] += cnt;
                             }
@@ -689,6 +694,10 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                                                         k_mer.second == 0 ? temp_result_left.second : nullptr},
                                                         k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER), &rht_seq);
 
+                        }
+
+                        if (left_temp_k_mer.first == 60 or left_temp_k_mer.second == 60 or right_temp_k_mer.first == 60 or right_temp_k_mer.second == 60) {
+                            int t = 1;
                         }
 
                         if (lef_k_mer.first == 0 and k_mer.first == 0 and left_temp_k_mer.first == right_temp_k_mer.first
