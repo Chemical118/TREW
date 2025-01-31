@@ -435,7 +435,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             }
                         }
 
-                        if (si.first <= snum and not (lef_k_mer.first == k_mer.first and lef_k_mer_seq.first == get_rot_seq(reverse_complement_64(k_mer_seq.first) >> (2 * (32 - k_mer.first)), k_mer.first))) {
+                        if (si.first <= snum) {
                             for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                 (*(result.forward.first))[seq] += cnt;
                             }
@@ -444,7 +444,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                                 (*(result.backward.first))[seq] += cnt;
                             }
                         }
-                        if (si.second <= snum and not (lef_k_mer.second == k_mer.second and lef_k_mer_seq.second == get_rot_seq(reverse_complement_64(k_mer_seq.second) >> (2 * (32 - k_mer.second)), k_mer.second))) {
+                        if (si.second <= snum) {
                             for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                 (*(result.forward.second))[seq] += cnt;
                             }
@@ -649,7 +649,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                             }
                         }
 
-                        if (si.first <= snum and not (lef_k_mer.first == k_mer.first and lef_k_mer_seq.first == get_rot_seq_128(reverse_complement_128(k_mer_seq.first) >> (2 * (64 - k_mer.first)), k_mer.first))) {
+                        if (si.first <= snum) {
                             for (auto& [seq, cnt] : *(temp_result_left.first)) {
                                 (*(result.forward.first))[seq] += cnt;
                             }
@@ -658,7 +658,7 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                                 (*(result.backward.first))[seq] += cnt;
                             }
                         }
-                        if (si.second <= snum and not (lef_k_mer.second == k_mer.second and lef_k_mer_seq.second == get_rot_seq_128(reverse_complement_128(k_mer_seq.second) >> (2 * (64 - k_mer.second)), k_mer.second))) {
+                        if (si.second <= snum) {
                             for (auto& [seq, cnt] : *(temp_result_left.second)) {
                                 (*(result.forward.second))[seq] += cnt;
                             }
@@ -694,10 +694,6 @@ ResultMapData buffer_task_pair(TBBPairQueue* task_queue, ThreadData* thread_data
                                                         k_mer.second == 0 ? temp_result_left.second : nullptr},
                                                         k_mer_total_cnt, MAX(n / 4 + 1, MIN_MER), MIN(n / 2, MAX_MER), &rht_seq);
 
-                        }
-
-                        if (left_temp_k_mer.first == 60 or left_temp_k_mer.second == 60 or right_temp_k_mer.first == 60 or right_temp_k_mer.second == 60) {
-                            int t = 1;
                         }
 
                         if (lef_k_mer.first == 0 and k_mer.first == 0 and left_temp_k_mer.first == right_temp_k_mer.first
