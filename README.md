@@ -97,7 +97,7 @@ trew short MIN_MER MAX_MER <short_read_data1.fastq> <short_read_data2.fastq>... 
 Short-read sequencing (paired-end)
 > If you use short-read sequencing data other than standard Illumina paired-end, there is a possibility of errors in the results. Whenever possible, preprocess the data to ensure that it follows the same reference-based read orientation as Illumina paired-end.
 ```sh
-trew short MIN_MER MAX_MER --paired_end --fq1 <paired_end_forward.fastq>... --fq2 <short_read_data2.fastq>... -t <number of threads> 
+trew short MIN_MER MAX_MER --paired_end --fq1 <paired_end_forward.fastq>... --fq2 <paired_end_backward.fastq>... -t <number of threads> 
 ```
 
 Long-read sequencing
