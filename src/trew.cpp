@@ -6,9 +6,6 @@
 #include <fstream>
 #include <iostream>
 
-#ifdef _WIN32
-#include <io.h>
-#endif
 
 int MAX_MER;
 int MIN_MER;
