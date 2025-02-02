@@ -350,7 +350,7 @@ int main(int argc, char** argv) {
                 // Single-end mode, ensure SHORT_FASTQ_LOC has at least one argument
                 std::vector<std::string> fastq_loc_list = short_command.get<std::vector<std::string>>("SHORT_FASTQ");
                 if (fastq_loc_list.empty()) {
-                    std::cerr << "SHORT_FASTQ_LOC is required in single-end mode.\n";
+                    std::cerr << "SHORT_FASTQ is required in single-end mode.\n";
                     throw std::exception();
                 }
 
