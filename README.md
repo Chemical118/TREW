@@ -50,7 +50,7 @@ cmake --build build
 ```
 
 #### Install from source with Intel® oneAPI DPC++/C++ Compiler
-> We found that Intel® oneAPI DPC++/C++ Compiler has the potential to create ~20% faster programs on Intel® CPUs, especially, using multi-threading.
+> We found that Intel® oneAPI DPC++/C++ Compiler has the potential to create ~20% faster programs on Intel® CPUs.
 
 Install compiler at [Intel® oneAPI DPC++/C++ Compiler website](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html#gs.4ooj5x) with default destination.
 
@@ -86,17 +86,24 @@ cmake --build build
 ./build/trew -h
 ```
 ### Quick Start
-
-Short-read sequencing
+TREW supports both `fastq` and `fastq.gz` file formats.  
+  
+Short-read sequencing (single-end)
 
 ```sh
-trew short MIN_MER MAX_MER <short_read_data1.fastq.gz> <short_read_data2.fastq>... -t <number of threads> 
+trew short MIN_MER MAX_MER <short_read_data1.fastq> <short_read_data2.fastq>... -t <number of threads> 
+```
+
+Short-read sequencing (paired-end)
+> If you use short-read sequencing data other than standard Illumina paired-end, there is a possibility of errors in the results. Whenever possible, preprocess the data to ensure that it follows the same reference-based read orientation as Illumina paired-end.
+```sh
+trew short MIN_MER MAX_MER --paired_end --fq1 <paired_end_forward.fastq>... --fq2 <short_read_data2.fastq>... -t <number of threads> 
 ```
 
 Long-read sequencing
 
 ```sh
-trew long MIN_MER MAX_MER <long_read_data1.fastq.gz> <long_read_data2.fastq>... -t <number of threads> 
+trew long MIN_MER MAX_MER <long_read_data1.fastq> <long_read_data2.fastq>... -t <number of threads> 
 ```
 
 MIN_MER : minimum length of sequence to find telomere [MIN_MER >= 3]  
@@ -109,6 +116,9 @@ The following is a recommended command line to run TREW.
 ```sh
 trew short 5 32 <short_read_species1_data1.fastq.gz> <short_read_species1_data2.fastq>... -t <number of threads>
 trew short 5 32 <short_read_species2_data1.fastq.gz> <short_read_species2_data2.fastq>... -t <number of threads>
+
+trew short 5 32 --paired_end --fq1 <short_read_species1_data1.fastq.gz>... --fq2 <short_read_species1_data2.fastq>... -t <number of threads>
+trew short 5 32 --paired_end --fq1 <short_read_species2_data1.fastq.gz>... --fq2 <short_read_species2_data2.fastq>... -t <number of threads>
 
 trew long 5 32 <long_read_species1_data1.fastq.gz> <long_read_species1_data2.fastq>... -t <number of threads>
 trew long 5 32 <long_read_species2_data1.fastq.gz> <long_read_species2_data2.fastq>... -t <number of threads>
