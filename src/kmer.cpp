@@ -1429,7 +1429,7 @@ FinalFastqOutput process_kmer_long(const char* file_name, uint8_t **repeat_check
 
     FileReader reader;
     if (is_gz) {
-        FILE* fp = fopen(file_name, "rb");
+        gzFile fp = gzopen(file_name, "r");
         if (fp == nullptr) {
             fprintf(stderr, "File open failed\n");
             exit (EXIT_FAILURE);

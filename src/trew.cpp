@@ -448,7 +448,7 @@ int main(int argc, char** argv) {
         } else {
             fastq_output = process_kmer_long(std::filesystem::canonical(fastq_tmp_path[0]).string().c_str(), repeat_check_table, rot_table,
                                               extract_k_mer, extract_k_mer_128, extract_k_mer_ans,
-                                              thread_data_list, is_gz_vec[1]);
+                                              thread_data_list, is_gz_vec[0]);
         }
 
         for (auto& [k, v] : *fastq_output.high) {
